@@ -1,0 +1,46 @@
+http://192.168.0.61/update?SSID=A1+Net&password=84992434219
+/update
+	Обновление прошивки по воздуху OTA, через POST (type='file' name='update')
+
+/ledOff
+	Отключение LED
+
+/ledOn
+	Включение LED
+
+/buzzerTest 
+	Включение спикера
+	
+	
+/set
+/set?param1=1
+/set?param1=1&param2=32
+
+Params:
+	buzzer_mode:
+		0 - on with off timer, buzzer_timeout sec
+		1 - on with tone and off timer, buzzer_timeout, buzzer_tone
+		2 - on without off timer
+		3 - on with tone, but without off timer, buzzer_tone
+	
+	buzzer_tone:
+		100 - 10000Hz
+	
+	buzzer_timeout:
+		0 - max_int ms
+		
+	led_mode:
+		0 - on\off
+		1 - pwm, led_pwm
+		2 - blink, led_timeout - blink time
+	
+	led_timeout:
+		0 - max_int ms
+		
+	led_pwm:
+		(0 - 255) inverse
+		
+Exm:
+	/set?led_mode=1&led_pwm=128
+	/set?buzzer_mode=2
+	
