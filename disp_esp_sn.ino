@@ -591,7 +591,7 @@ void loop() {
                 if(dht_hum > 98){
                 loop_u++;
 				loop_u_new=1;}
-                sprintf(cstr1, "Влажн св: %.2f", dht_hum);
+                sprintf(cstr1, "Влажн: %.2f", dht_hum);
                 sm[0]=0x25;
               }
             else if(loop_u==2){
@@ -600,7 +600,7 @@ void loop() {
 				loop_u_new=1;}
                 sprintf(cstr1, "Осв: %.2fлкс", lux);}
             else if(loop_u==3){
-                sprintf(cstr1, "Темп св: %.2f", dht_temp);
+                sprintf(cstr1, "Темп: %.2f", dht_temp);
                 sm[0]=0x99;
                 sm[1]='C';
               }
