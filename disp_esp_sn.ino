@@ -232,8 +232,7 @@ void setup() {
               Serial.println("Config saved");
             }
         Serial.println("Failed to load config");
-      } 
-
+      }
     srlcd.setCursor(OFFSET,0);
     Serial.println("W STA ");
     srlcd.print("W СБРОС С2");
