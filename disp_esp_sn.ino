@@ -68,7 +68,7 @@ unsigned long tfs = 0, timecor;
 
 volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, idht_ok=false;
 volatile bool ispmode = false, drq = false, send_data = false, repsend = false, s_redy=false;
-volatile bool loop_en=true, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0;
+volatile bool loop_en=true, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, narodmon_nts = true;
 
 char cstr1[BUF_SIZE], replyb[RBUF_SIZE], nreplyb[RBUF_SIZE], ctmp='\0';
 String wpass="84992434219", wname="A1 Net";
@@ -410,8 +410,12 @@ void setup() {
             }
           }
         if (server.arg("backlight") != "") {
-            lcdbacklset(atoi(server.arg("backlight").c_str()));
+            lcdbacklset(tobool(server.arg("backlight").c_str()));
         }
+		if (server.arg("narodmon_nts") != "") {
+            narodmon_nts = tobool(server.arg("narodmon_nts").c_str());
+        }
+		
         server.send(200, "text/html", webPage);
         delay(1000);
         saveConfig();
@@ -879,9 +883,11 @@ bool loadConfig() {
         return false;}
     if(atoi(json["fw_ver"]) != fw_ver){
 		return false;
+	
     }
 	
     lcdbacklset(tobool(json["lcdbackl"]));
+	narodmon_nts = tobool(json["narodmon_nts"]);
 
 	 
     return true;
@@ -898,6 +904,7 @@ bool saveConfig() {
     json["lcdbackl"] = lcdbacklset();
     json["wname"] = wname;
     json["wpass"] = wpass;
+	json["narodmon_nts"] = narodmon_nts;
     json.printTo(configFile);
 	configFile.close();
     return true;
@@ -985,7 +992,9 @@ bool NAROD_data_send(char *str,short int size) {
 }
 
 void data_send_f() {
-	narodmon_send = true;
+	if(narodmon_nts == true) {
+		narodmon_send = true;
+	}
 	return;
 }
 
