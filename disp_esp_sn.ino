@@ -22,7 +22,7 @@
 #define SECS_PER_HOUR (3600UL)
 #define SECS_PER_DAY  (SECS_PER_HOUR * 24L)
 #define BUF_SIZE 2512
-#define RBUF_SIZE 512
+#define RBUF_SIZE 2048
 #define DHT22_PIN 5
 #define NAN -200
 #define RCOL 30
@@ -668,8 +668,8 @@ void loop() {
         const unsigned long seventyYears = 2208988800UL;
         // subtract seventy years:
         unsigned long epoch = secsSince1900 - seventyYears;
-        srlcd.setCursor(0,0);
-		srlcd.print(dht.computeHeatIndex(idht_temp, idht_hum, false));
+        //srlcd.setCursor(0,0);
+	//	srlcd.print(dht.computeHeatIndex(idht_temp, idht_hum, false));
         srlcd.setCursor(5,0);
 		srlcd.print(" ");
         i=numberOfHours(epoch);
@@ -772,11 +772,11 @@ bool parse_A1DSP(char* tempstr) {
 				lux=dat_mas[ilp];
 				lux_ok=true;
 			}
-			else if (strcmp(name_mas[ilp], "DHUM") == 0) {
+			else if (strcmp(name_mas[ilp], "HUM") == 0) {
 				dht_hum=dat_mas[ilp];
 				dht_ok=true;
 			}
-			else if (strcmp(name_mas[ilp], "DTMP") == 0) {
+			else if (strcmp(name_mas[ilp], "TEMP") == 0) {
 				dht_temp=dat_mas[ilp];
 				dht_ok=true;
 			}
@@ -845,7 +845,7 @@ void httpRequest() {
     if (client.connect("dev.a1mc.ru", 80)) {
         //Serial.println("connecting...");
         // send the HTTP GET request:
-        client.println("GET /kd1.php HTTP/1.1");
+        client.println("GET /kd2.php HTTP/1.1");
         client.println("Host: dev.a1mc.ru");
         client.println("User-Agent: ESP_DISP/1.1");
         client.println("Connection: close");
