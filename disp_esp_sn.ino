@@ -37,6 +37,7 @@
 const char *HOST_NAME = "DISP_ESP";
 const char *endl = "\n";
 const int fw_ver = 33;
+
 #define dataPin 12
 #define clockPin 14
 #define enablePin 13
@@ -465,6 +466,9 @@ void loop() {
 				idht_temp = dht.readTemperature();;
 				idht_hum = tmp;
 				idht_ok=true;
+			}
+			if(idht_temp == 0 && idht_hum == 0){
+				idht_ok=false;
 			}
 			data_get=false;
 			if(idht_ok==1){
