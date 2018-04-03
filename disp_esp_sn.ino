@@ -69,6 +69,7 @@ unsigned long tfs = 0, timecor;
 volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, idht_ok=false;
 volatile bool ispmode = false, drq = false, send_data = false, repsend = false, s_redy=false;
 volatile bool loop_en=true, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, narodmon_nts = false;
+volatile bool ntp_error = false;
 
 char cstr1[BUF_SIZE], replyb[RBUF_SIZE], nreplyb[RBUF_SIZE], ctmp='\0';
 String wpass="84992434219", wname="A1 Net";
@@ -443,11 +444,13 @@ void setup() {
         unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
         timecor = highWord << 16 | lowWord;
         timecor = timecor - (millis()/1000);
+        ntp_error = false;
       }
 	else
 	{
 		srlcd.setCursor(0,1);
-		srlcd.print("Запуск ntp          ");
+		srlcd.print("Ошибка ntp          ");
+		ntp_error = true;
 	}
     udp.stop();
     srlcd.clear();
@@ -610,12 +613,12 @@ void loop() {
                 sm[1]='C';
               }
 			else if(loop_u==4 && idht_ok == true){
-				sprintf(cstr1, "Темп юг: %.2f", tidht_temp);
+				sprintf(cstr1, "Вн темп: %.2f", tidht_temp);
 				sm[0]=0x99;
 				sm[1]='C';
 			}
 			else if(loop_u==5 && idht_ok == true){
-				sprintf(cstr1, "Влажн юг: %.2f", tidht_hum);
+				sprintf(cstr1, "Вн влажн: %.2f", tidht_hum);
 				sm[0]=0x25;
 			}
 			
@@ -801,6 +804,12 @@ bool parse_A1DSP(char* tempstr) {
 			else if (strcmp(name_mas[ilp], "BTMP") == 0) {
 				bmp_temp=dat_mas[ilp];
 				bmp_ok=true;
+			}
+            else if(ntp_error == true && strcmp(name_mas[ilp], "time") == 0) {
+			    timecor=(long)dat_mas[ilp];
+                ntp_error = false;
+                srlcd.setCursor(0,1);
+                srlcd.print("Уст врем через a1pr ");
 			}
 		}	
 	}
