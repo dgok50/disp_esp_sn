@@ -233,8 +233,7 @@ void setup() {
               Serial.println("Config saved");
             }
         Serial.println("Failed to load config");
-      } 
-
+      }
     srlcd.setCursor(OFFSET,0);
     Serial.println("W STA ");
     srlcd.print("W СБРОС С2");
@@ -611,12 +610,12 @@ void loop() {
                 sm[1]='C';
               }
 			else if(loop_u==4 && idht_ok == true){
-				sprintf(cstr1, "Вн темп: %.2f", tidht_temp);
+				sprintf(cstr1, "Темп юг: %.2f", tidht_temp);
 				sm[0]=0x99;
 				sm[1]='C';
 			}
 			else if(loop_u==5 && idht_ok == true){
-				sprintf(cstr1, "Вн влажн: %.2f", tidht_hum);
+				sprintf(cstr1, "Влажн юг: %.2f", tidht_hum);
 				sm[0]=0x25;
 			}
 			
