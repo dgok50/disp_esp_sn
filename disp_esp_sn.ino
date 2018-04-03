@@ -806,10 +806,11 @@ bool parse_A1DSP(char* tempstr) {
 				bmp_ok=true;
 			}
             else if(ntp_error == true && strcmp(name_mas[ilp], "time") == 0) {
-			    timecor=(long)dat_mas[ilp];
+			    timecor=(unsigned long)dat_mas[ilp]*100000;
                 ntp_error = false;
                 srlcd.setCursor(0,1);
                 srlcd.print("Уст врем через a1pr ");
+                timecor = timecor - (millis()/1000);
 			}
 		}	
 	}
