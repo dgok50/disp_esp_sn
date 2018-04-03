@@ -36,7 +36,7 @@
 
 const char *HOST_NAME = "DISP_ESP";
 const char *endl = "\n";
-const int fw_ver = 33;
+const int fw_ver = 35;
 
 #define dataPin 12
 #define clockPin 14
@@ -68,7 +68,7 @@ unsigned long tfs = 0, timecor;
 
 volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, idht_ok=false;
 volatile bool ispmode = false, drq = false, send_data = false, repsend = false, s_redy=false;
-volatile bool loop_en=true, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, narodmon_nts = true;
+volatile bool loop_en=true, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, narodmon_nts = false;
 
 char cstr1[BUF_SIZE], replyb[RBUF_SIZE], nreplyb[RBUF_SIZE], ctmp='\0';
 String wpass="84992434219", wname="A1 Net";
@@ -445,6 +445,11 @@ void setup() {
         timecor = highWord << 16 | lowWord;
         timecor = timecor - (millis()/1000);
       }
+	else
+	{
+		srlcd.setCursor(0,1);
+		srlcd.print("Запуск ntp          ");
+	}
     udp.stop();
     srlcd.clear();
 	data_collect.attach(5, getd);
