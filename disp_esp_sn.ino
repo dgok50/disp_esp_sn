@@ -36,7 +36,7 @@
 
 const char *HOST_NAME = "DISP_ESP";
 const char *endl = "\n";
-const int fw_ver = 35;
+const int fw_ver = 36;
 
 #define dataPin 12
 #define clockPin 14
