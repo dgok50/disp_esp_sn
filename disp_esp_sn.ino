@@ -34,6 +34,7 @@
 
 #define OFFSET 10                                           //LCD char offset
 
+
 const char *HOST_NAME = "DISP_ESP";
 const char *endl = "\n";
 const int fw_ver = 36;
