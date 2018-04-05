@@ -807,7 +807,7 @@ bool parse_A1DSP(char* tempstr) {
 				bmp_ok=true;
 			}
             else if(strcmp(name_mas[ilp], "time") == 0) {
-                timea1pr=(unsigned long)dat_mas[ilp]*100000;
+                timea1pr=dat_mas[ilp]*100000;
                 if(ntp_error == true){
                     timecor=timea1pr;
                     ntp_error = false;
