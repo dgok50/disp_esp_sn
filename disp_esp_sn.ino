@@ -862,7 +862,9 @@ void httpRequest() {
         // send the HTTP GET request:
         client.println("GET /kd2.php HTTP/1.1");
         client.println("Host: dev.a1mc.ru");
-        client.println("User-Agent: %s/1.1", HOST_NAME);
+        client.print("User-Agent: ");
+        client.print(HOST_NAME);
+        client.println("/1.1");
         client.println("Accept: text/plain, text/html");
         client.println("Connection: close");
         client.println();
