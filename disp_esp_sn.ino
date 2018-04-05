@@ -138,7 +138,6 @@ const char *webPage ="<!DOCTYPE html>"
 ShiftRegLCD123 srlcd(dataPin, clockPin, enablePin, SRLCD123);
 
 void setup() {
-
     Serial.begin(9600);   
     Serial.println("A1 DISP_ESP_ST");
     pinMode(5, INPUT);
