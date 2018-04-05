@@ -64,7 +64,7 @@ float sdht_temp[S_MAX], sdht_hum[S_MAX], tidht_temp=0;
 unsigned int loop_i = 0, i=0, loop_u = 0, s_i=0;
 
 
-unsigned long tfs = 0, timecor;
+unsigned long tfs = 0, timecor=0, timea1pr=0;
 
 volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, idht_ok=false;
 volatile bool ispmode = false, drq = false, send_data = false, repsend = false, s_redy=false;
@@ -299,8 +299,9 @@ void setup() {
         
         tfs = millis()/1000;
 		sprintf(cstr1, "Hostname: %s\nFW Ver: %d.%d.%d\n"
-		"Comp info, time: " __TIME__ ", date: " __DATE__ "\n"
-		"MAC: %s\n"
+		 "Comp info, time: " __TIME__ ", date: " __DATE__ "\n"
+         "Time cor a1pr: %u\n"
+		 "MAC: %s\n"
 		 "SketchSize: %d\n"
          "SketchMD5: %s\n"
          "CPU Frq: %d MHz\n"
@@ -331,7 +332,7 @@ void setup() {
 		 "Repet send: %d\n"
 		 "Loop enable: %d\n"
          "Signal quality: %d %%\n"
-         "Last Reply: %s\n", HOST_NAME, fw_ver/100, (fw_ver%100)/10, fw_ver%10,
+         "Last Reply: %s\n", HOST_NAME, fw_ver/100, (fw_ver%100)/10, fw_ver%10, timea1pr,
 		 mac, ESP.getSketchSize(), ESP.getSketchMD5().c_str(), ESP.getCpuFreqMHz(),
 		 ESP.getFreeHeap(), esp_vcc, idht_ok, idht_hum, 0x25, idht_temp, 0xB0,
 		 dht.computeHeatIndex(idht_temp, idht_hum, false), 0xB0, s_redy, tidht_hum,
@@ -805,12 +806,15 @@ bool parse_A1DSP(char* tempstr) {
 				bmp_temp=dat_mas[ilp];
 				bmp_ok=true;
 			}
-            else if(ntp_error == true && strcmp(name_mas[ilp], "time") == 0) {
-			    timecor=(unsigned long)dat_mas[ilp]*100000;
-                ntp_error = false;
-                srlcd.setCursor(0,1);
-                srlcd.print("Уст врем через a1pr ");
-                timecor = timecor - (millis()/1000);
+            else if(strcmp(name_mas[ilp], "time") == 0) {
+                timea1pr=(unsigned long)dat_mas[ilp]*100000;
+                if(ntp_error == true){
+                    timecor=timea1pr;
+                    ntp_error = false;
+                    srlcd.setCursor(0,1);
+                    srlcd.print("Уст врем через a1pr ");
+                    timecor = timecor - (millis()/1000);
+                }
 			}
 		}	
 	}
