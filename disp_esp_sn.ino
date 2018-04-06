@@ -809,7 +809,7 @@ bool parse_A1DSP(char* tempstr) {
             else if(strcmp(name_mas[ilp], "time") == 0) {
                 timea1pr=dat_mas[ilp]*100000;
                 if(ntp_error == true){
-                    timecor=timea1pr;
+                    timecor=timea1pr+2208988800ul;
                     ntp_error = false;
                     srlcd.setCursor(0,1);
                     srlcd.print("Уст врем через a1pr ");
