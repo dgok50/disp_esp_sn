@@ -7,12 +7,12 @@
 #include <ArduinoJson.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266WiFi.h>
-#include <DHT.h>
 #include <SPI.h>
+#include <Wire.h>
 #include <WiFiClient.h>
 #include <WiFiUdp.h>
 
-#include "ShiftRegLCD123.h"
+#include "LiquidCrystal_I2C.h"
 #include <Ticker.h>
 
 #pragma GCC push_options
@@ -37,7 +37,7 @@
 
 const char *HOST_NAME = "DISP_ESP";
 const char *endl = "\n";
-const int fw_ver = 36;
+const int fw_ver = 39;
 
 #define dataPin 12
 #define clockPin 14
@@ -49,8 +49,6 @@ const int fw_ver = 36;
 #define elapsedDays(_time_) ( _time_ / SECS_PER_DAY)  
 
 ADC_MODE(ADC_VCC);
-
-DHT dht(DHT22_PIN, DHT22);
 
 Ticker data_collect, data_send_tic;
 
@@ -69,7 +67,7 @@ unsigned long tfs = 0, timecor=0, timea1pr=0;
 
 volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, idht_ok=false;
 volatile bool ispmode = false, drq = false, send_data = false, repsend = false, s_redy=false;
-volatile bool loop_en=true, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, narodmon_nts = false;
+volatile bool loop_en=1, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, narodmon_nts = false;
 volatile bool ntp_error = false;
 
 char cstr1[BUF_SIZE], replyb[RBUF_SIZE], nreplyb[RBUF_SIZE], ctmp='\0';
@@ -135,11 +133,11 @@ const char *webPage ="<!DOCTYPE html>"
 " </body>\n"
 "</html>\n";
 
-ShiftRegLCD123 srlcd(dataPin, clockPin, enablePin, SRLCD123);
+LiquidCrystal_I2C srlcd(0x20, 20, 2);
 
 void setup() {
-    Serial.begin(9600);   
-    Serial.println("A1 DISP_ESP_ST");
+    //Serial.begin();   
+    //Serial.println("A1 DISP_ESP_ST");
     pinMode(5, INPUT);
     yield();
     bzero(cstr1, BUF_SIZE);
@@ -147,12 +145,12 @@ void setup() {
     for(int r=0;r<RCOL;r++){
 	  bzero(rdtmp[r],2);
     }
-    srlcd.begin(20,2);
+    srlcd.begin();
     srlcd.clear();
     srlcd.setCursor(0,0);
     srlcd.print(HOST_NAME);
     srlcd.setCursor(0,1);
-    Serial.println("Starting esp.");
+    //Serial.println("Starting esp.");
     srlcd.print("Версия ");    
 	sprintf(cstr1, "%d.%d.%d", fw_ver/100, (fw_ver%100)/10, fw_ver%10);
     srlcd.print(cstr1);
@@ -166,15 +164,15 @@ void setup() {
     srlcd.print("Запуск.              ");
     srlcd.setCursor(OFFSET,0);
     srlcd.print("WiFi");
-    Serial.println("WIFI");
+    //Serial.println("WIFI");
     WiFi.begin();
     yield();
     srlcd.setCursor(7,1);
     srlcd.print(".");
-    srlcd.backlightOn();
+    srlcd.backlight();
     srlcd.setCursor(OFFSET,0);
     srlcd.print("SPIFS");
-    Serial.println("SPIFS");
+    //Serial.println("SPIFS");
     
     if(ESP.getResetS() == false || digitalRead(5) == LOW)
     {
@@ -189,7 +187,7 @@ void setup() {
     }
     if(selfup == false) {
     if (!SPIFFS.begin()) {                                      //|| !digitalRead(BUT)) {
-        Serial.println("Failed to mount file system");
+        //Serial.println("Failed to mount file system");
         SPIFFS.format();
         srlcd.setCursor(0,1);
         srlcd.print("Форматирование SPIFS");
@@ -198,7 +196,7 @@ void setup() {
     srlcd.setCursor(OFFSET,0);
     srlcd.print("W СБРОС С1");
     yield();
-    Serial.println("W СБРС");
+    //Serial.println("W СБРС");
     srlcd.setCursor(8,1);
     srlcd.print(".");
     yield();
@@ -210,7 +208,7 @@ void setup() {
 
     srlcd.setCursor(OFFSET,0);
     srlcd.print("ЗАГР КОНФ ");
-    Serial.println("CFG L");
+    //Serial.println("CFG L");
     yield();
     srlcd.setCursor(9,1);
     srlcd.print(".");
@@ -225,18 +223,18 @@ void setup() {
         if (!saveConfig()) {
     	    srlcd.setCursor(0,1);
     	    srlcd.print("НЕ ВОЗМОЖНО СОХР КОНФ");
-            Serial.println("Failed to save config");
+            //Serial.println("Failed to save config");
             SPIFFS.format();
 			} 
 		else {
     	      srlcd.setCursor(0,1);
     	      srlcd.print("УСП СОХР КОНФ");
-              Serial.println("Config saved");
+              //Serial.println("Config saved");
             }
-        Serial.println("Failed to load config");
+        //Serial.println("Failed to load config");
       }
     srlcd.setCursor(OFFSET,0);
-    Serial.println("W STA ");
+    //Serial.println("W STA ");
     srlcd.print("W СБРОС С2");
     srlcd.setCursor(10,1);
     srlcd.print(".");
@@ -260,7 +258,7 @@ void setup() {
     int t = 0;
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
-        Serial.print(".");
+        //Serial.print(".");
         t++;
         if (t == 20) {
             srlcd.setCursor(OFFSET,0);
@@ -272,19 +270,18 @@ void setup() {
             IPAddress myIP = WiFi.softAPIP();
           }
       }
-    Serial.println("WiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
+    //Serial.println("WiFi connected");
+    //Serial.println("IP address: ");
+    //Serial.println(WiFi.localIP());
 
     srlcd.setCursor(OFFSET,0);
-	dht.begin();
     srlcd.print("ЗАПУСК WEB");
     srlcd.setCursor(0,1);
     srlcd.print("Запуск сервера  ");
 	
     server.on("/", []() {
         server.send(200, "text/html", webPage);
-        Serial.printf("Stations connected = %d\n", WiFi.softAPgetStationNum());
+        //Serial.printf("Stations connected = %d\n", WiFi.softAPgetStationNum());
       });
 
     server.on("/config.json", []() {
@@ -293,6 +290,63 @@ void setup() {
         file.close();
         delay(1000);
       });
+	  
+	  
+	  
+
+server.on("/i2c", []() {
+	
+	 bzero(cstr1, BUF_SIZE);
+     sprintf(cstr1, "-");
+     
+	  uint8_t portArray[] = {5, 4};
+		
+		
+  for (uint8_t i = 0; i < sizeof(portArray); i++) {
+    for (uint8_t j = 0; j < sizeof(portArray); j++) {
+      if (i != j){
+        sprintf(cstr1, "%s\nScanning (SDA : SCL) - %d : %d - ", cstr1, portArray[i],portArray[j]);
+        Wire.begin(portArray[i], portArray[j]);
+          byte error, address;
+  int nDevices;
+  nDevices = 0;
+  for (address = 1; address < 127; address++ )  {
+    // The i2c_scanner uses the return value of
+    // the Write.endTransmisstion to see if
+    // a device did acknowledge to the address.
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+
+    if (error == 0){
+      sprintf(cstr1, "%s\nI2C device found at address 0x", cstr1);
+      if (address < 16)
+        sprintf(cstr1, "%s\n0", cstr1);
+      sprintf(cstr1, "%s%x\n",cstr1 ,address);
+
+      nDevices++;
+    } else if (error == 4) {
+      sprintf(cstr1, "%s\nUnknow error at address 0x", cstr1);
+      if (address < 16)
+        sprintf(cstr1, "%s\n0", cstr1);
+      sprintf(cstr1, "%s%x\n",cstr1 ,address);
+    }
+  } //for loop
+  if (nDevices == 0)
+    sprintf(cstr1,"%sNo I2C devices found\n", cstr1);
+  else
+    sprintf(cstr1,"%s**********************************\n", cstr1);
+      }
+    }
+  }
+	server.send(200, "text/plain", cstr1);
+	delay(1000);
+});
+
+
+	  
+	  
+	  
+	  
 
     server.on("/sysinfo.txt", []() {
         bzero(cstr1, BUF_SIZE);
@@ -311,11 +365,9 @@ void setup() {
          "Int DHT OK: %d\n"
          "Int DHT Hum: %.2f%c\n"
          "Int DHT Temp: %.2f%cC\n"
-         "Int DHT Haetindex: %.2f%cC\n"
          "Int DHT S REDY: %d\n"
          "Int DHT Hum: %.2f%c\n"
          "Int DHT S Temp: %.2f%cC\n"
-         "Int DHT S Haetindex: %.2f%cC\n"
          "Time from start: %lu hours %lu minutes %lu Sec, and %lu days \n"
          "ESP Chip ID: %X\n"
          "Flash id: %X\n"
@@ -334,10 +386,8 @@ void setup() {
          "Signal quality: %d %%\n"
          "Last Reply: %s\n", HOST_NAME, fw_ver/100, (fw_ver%100)/10, fw_ver%10, timea1pr,
 		 mac, ESP.getSketchSize(), ESP.getSketchMD5().c_str(), ESP.getCpuFreqMHz(),
-		 ESP.getFreeHeap(), esp_vcc, idht_ok, idht_hum, 0x25, idht_temp, 0xB0,
-		 dht.computeHeatIndex(idht_temp, idht_hum, false), 0xB0, s_redy, tidht_hum,
-		 0x25, tidht_temp, 0xB0, dht.computeHeatIndex(tidht_temp, tidht_hum, false),
-		 0xB0, numberOfHours(tfs), numberOfMinutes(tfs), numberOfSeconds(tfs), elapsedDays(tfs),
+		 ESP.getFreeHeap(), esp_vcc, idht_ok, idht_hum, 0x25, idht_temp, 0xB0, s_redy, tidht_hum,
+		 0x25, tidht_temp, 0xB0, numberOfHours(tfs), numberOfMinutes(tfs), numberOfSeconds(tfs), elapsedDays(tfs),
 		 ESP.getChipId(), ESP.getFlashChipId(), ESP.getFlashChipRealSize(), ESP.getFlashChipSize(), ESP.getFlashChipSpeed(),
 		 (ESP.getFlashChipMode() == FM_QIO ? "QIO" : ESP.getFlashChipMode() == FM_QOUT ? "QOUT" : ESP.getFlashChipMode() == FM_DIO ? "DIO" : ESP.getFlashChipMode() == FM_DOUT ? "DOUT" : "UNKNOWN"),
 		 ESP.getResetReason().c_str(), ESP.getResetS(), ESP.getResetInfo().c_str(), WiFi.status(),
@@ -367,23 +417,6 @@ void setup() {
         selfup=true;
       });
 
-    server.on("/serial_in.txt", []() {
-        Serial.flush();
-        Serial.println("");
-        sprintf(cstr1,"STR:1 ");
-        delay(5000);
-        i = strlen(cstr1);
-        while (Serial.available() > 0) {
-            while (Serial.available() > 0) {
-                cstr1[i] = Serial.read();
-                i++;
-              }
-            delay(10);
-          }
-        cstr1[i]='\0';
-        server.send(200, "text/plain", cstr1);
-        delay(1000);
-      });
     server.on("/set", []() {
         if (server.arg("restart") != "") {
             server.send(200, "text/xhtml", "RESTARTING...\n");
@@ -402,6 +435,7 @@ void setup() {
             WiFi.disconnect(false);
             WiFi.begin(wname.c_str(), wpass.c_str());
           }
+		  
         if (server.arg("net_name") != "") {
         if (server.arg("pass") != "") {
               wname = server.arg("net_name");
@@ -414,6 +448,10 @@ void setup() {
         if (server.arg("backlight") != "") {
             lcdbacklset(tobool(server.arg("backlight").c_str()));
         }
+		if (server.arg("loop_en") != "") {
+            loop_en = tobool(server.arg("loop_en").c_str());
+        }
+		
 		if (server.arg("narodmon_nts") != "") {
             narodmon_nts = tobool(server.arg("narodmon_nts").c_str());
         }
@@ -438,7 +476,7 @@ void setup() {
     delay(1000);
     int cb = udp.parsePacket();
     if (cb) {
-        Serial.println("no packet yet");
+        //Serial.println("no packet yet");
         udp.read(packetBuffer, NTP_PACKET_SIZE);
 		
         unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
@@ -470,12 +508,12 @@ void loop() {
     if(loop_en == true) {
         esp_vcc = ESP.getVcc()/1000.0;
 		if(data_get==true) {
-			tmp=dht.readHumidity();
+			tmp=0;
 			if(tmp < 0 || tmp > 100 || tmp == NAN){
 				idht_ok=false;
 			}
 			if(tmp > 0 && tmp < 100 && tmp != NAN){
-				idht_temp = dht.readTemperature();;
+				idht_temp = 0;
 				idht_hum = tmp;
 				idht_ok=true;
 			}
@@ -833,7 +871,7 @@ bool parse_A1DSP(char* tempstr) {
 }
 
 unsigned long sendNTPpacket(IPAddress& address){
-    Serial.println("[NTP]sending NTP packet...");
+    //Serial.println("[NTP]sending NTP packet...");
     // set all bytes in the buffer to 0
     memset(packetBuffer, 0, NTP_PACKET_SIZE);
     // Initialize values needed to form NTP request
@@ -862,7 +900,7 @@ void httpRequest() {
 
     // if there's a successful connection:
     if (client.connect("dev.a1mc.ru", 80)) {
-        //Serial.println("connecting...");
+        ////Serial.println("connecting...");
         // send the HTTP GET request:
         client.println("GET /kd2.php HTTP/1.1");
         client.println("Host: dev.a1mc.ru");
@@ -874,7 +912,7 @@ void httpRequest() {
         client.println();
       } else {
           // if you couldn't make a connection:
-          //Serial.println("connection failed");
+          ////Serial.println("connection failed");
         }
   }
 
@@ -1074,10 +1112,10 @@ bool lcdbacklset(int bkl){
  switch (bkl) {
 	case 1:
 		lcdbackl=true;
-		srlcd.backlightOn();
+		srlcd.backlight();
 		break;
        case 0:
-		srlcd.backlightOff();
+		srlcd.noBacklight();
 		lcdbackl=false;
 		break;
 		}
