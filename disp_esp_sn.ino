@@ -6,7 +6,12 @@
 #include "a1fl.c" //Библиотека с прекладными функциями
 #include <ArduinoJson.h>
 #include <ESP8266WebServer.h>
+#include "BH1750.h"
 #include <ESP8266WiFi.h>
+
+#include "Adafruit_Sensor.h"
+#include "Adafruit_BME280.h"
+
 #include <SPI.h>
 #include <Wire.h>
 #include <WiFiClient.h>
@@ -37,7 +42,7 @@
 
 const char *HOST_NAME = "DISP_ESP";
 const char *endl = "\n";
-const int fw_ver = 39;
+const int fw_ver = 101;
 
 #define dataPin 12
 #define clockPin 14
@@ -52,15 +57,21 @@ ADC_MODE(ADC_VCC);
 
 Ticker data_collect, data_send_tic;
 
+Adafruit_BME280 bme;
+void buthandleInterrupts();
+void POWERBhandleInt();
+void UPBhandleInt();
+void DNBhandleInt();
+
 const char *password = "012345780";
 
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
 
 float mqv=0, mq7=0, mq9=0, vin=0, mc_vcc=0, mc_temp=0, lux=0, esp_vcc=0, tmp=0, mqv5=0, mq9_5=0;
-float dht_temp=0, dht_hum=0, bmp_temp=0, bmp_pre=0, rdy=0, idht_temp=0, idht_hum=0, tidht_hum=0;
+float dht_temp=0, dht_hum=0, bmp_temp=0, bmp_pre=0, rdy=0, idht_temp=0, idht_hum=0, tidht_hum=0, ilux=0;
 float sdht_temp[S_MAX], sdht_hum[S_MAX], tidht_temp=0;
-unsigned int loop_i = 0, i=0, loop_u = 0, s_i=0;
+unsigned int loop_i = 0, i=0, loop_u = 0, s_i=0, ppress=0;
 
 
 unsigned long tfs = 0, timecor=0, timea1pr=0;
@@ -68,7 +79,7 @@ unsigned long tfs = 0, timecor=0, timea1pr=0;
 volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, idht_ok=false;
 volatile bool ispmode = false, drq = false, send_data = false, repsend = false, s_redy=false;
 volatile bool loop_en=1, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, narodmon_nts = false;
-volatile bool ntp_error = false;
+volatile bool ntp_error = false, but_reed = false, bpower = false, bup = false, bdn = false;
 
 char cstr1[BUF_SIZE], replyb[RBUF_SIZE], nreplyb[RBUF_SIZE], ctmp='\0';
 String wpass="84992434219", wname="A1 Net";
@@ -79,7 +90,7 @@ void getd();
 bool loadConfig();
 bool saveConfig();
 bool lcdbacklset();
-bool lcdbacklset(int);
+bool lcdbacklset(bool);
 unsigned int localPort = 2390;                              // local port to listen for UDP packets
 IPAddress timeServerIP;
 const char* ntpServerName = "ru.pool.ntp.org";
@@ -134,11 +145,19 @@ const char *webPage ="<!DOCTYPE html>"
 "</html>\n";
 
 LiquidCrystal_I2C srlcd(0x20, 20, 2);
+BH1750 lightMeter;
+#define DNB 14
+#define UPB 0
+#define POWERB 2
 
 void setup() {
     //Serial.begin();   
     //Serial.println("A1 DISP_ESP_ST");
-    pinMode(5, INPUT);
+    pinMode(POWERB, INPUT);
+    pinMode(DNB, INPUT);
+    pinMode(UPB, INPUT);
+	digitalWrite(DNB, LOW);
+	digitalWrite(UPB, LOW);
     yield();
     bzero(cstr1, BUF_SIZE);
     bzero(replyb, RBUF_SIZE);
@@ -174,7 +193,7 @@ void setup() {
     srlcd.print("SPIFS");
     //Serial.println("SPIFS");
     
-    if(ESP.getResetS() == false || digitalRead(5) == LOW)
+    if(ESP.getResetS() == false || digitalRead(POWERB) == LOW)
     {
         selfup=true;
         loop_en=false;
@@ -186,6 +205,16 @@ void setup() {
         delay(1000);
     }
     if(selfup == false) {
+	Wire.begin();
+	lightMeter.begin();
+	bme.begin();  
+	bme.setSampling(
+	    Adafruit_BME280::MODE_FORCED,
+	    Adafruit_BME280::SAMPLING_X1,
+	    Adafruit_BME280::SAMPLING_X1,
+	    Adafruit_BME280::SAMPLING_X1,
+	    Adafruit_BME280::FILTER_OFF);
+	bme.takeForcedMeasurement();
     if (!SPIFFS.begin()) {                                      //|| !digitalRead(BUT)) {
         //Serial.println("Failed to mount file system");
         SPIFFS.format();
@@ -457,12 +486,19 @@ server.on("/i2c", []() {
         }
 		
         server.send(200, "text/html", webPage);
-        delay(1000);
+        delay(500);
         saveConfig();
       });
 
     server.begin();
     httpUpdater.setup(&server);
+	
+	srlcd.setCursor(OFFSET,0);
+    srlcd.print("ПОДКЛЮЧ ПРИРЫВ");
+	attachInterrupt(digitalPinToInterrupt(DNB), DNBhandleInt, FALLING);
+	attachInterrupt(digitalPinToInterrupt(UPB), UPBhandleInt, FALLING);
+	attachInterrupt(digitalPinToInterrupt(POWERB), POWERBhandleInt, FALLING);
+	
     srlcd.setCursor(OFFSET,0);
     srlcd.print("НОРМ РЕЖИМ");
     srlcd.setCursor(0,1);
@@ -506,14 +542,15 @@ void loop() {
 	  narodmon_send=false;
 	}
     if(loop_en == true) {
+		ilux = lightMeter.readLightLevel();
         esp_vcc = ESP.getVcc()/1000.0;
 		if(data_get==true) {
-			tmp=0;
+			tmp=bme.readHumidity();
 			if(tmp < 0 || tmp > 100 || tmp == NAN){
 				idht_ok=false;
 			}
 			if(tmp > 0 && tmp < 100 && tmp != NAN){
-				idht_temp = 0;
+				idht_temp = bme.readTemperature()-2;
 				idht_hum = tmp;
 				idht_ok=true;
 			}
@@ -588,7 +625,7 @@ void loop() {
         httpRequest();
         loop_i = 0;
         loop_u++;
-		loop_u_new=1;
+	loop_u_new=1;
       }
     yield();
     
@@ -625,12 +662,29 @@ void loop() {
         delay(2000);
         srlcd.clear();
         loop_en = true;
-    }
+    }/*
+	if(digitalRead(DNB) == LOW) {
+		srlcd.setCursor(0,0);
+		srlcd.print("0");
+		loop_u_new=1;
+		loop_u++;
+		delay(500);
+	}
+	if(digitalRead(UPB) == LOW) {
+		srlcd.setCursor(0,0);
+		srlcd.print("16");
+		loop_u_new=1;
+		loop_u--;
+		if(loop_u<0)
+			loop_u=0;
+		
+		delay(500);
+	}*/
     if(loop_en == true) {
         //if(dht_ok == 1){
 		if(loop_u_new==1){
+			ppress=0;
 			loop_u_new=0;
-            srlcd.setCursor(0,1);
             char sm[2] = {' ', ' '};
             srlcd.setCursor(0,1);
             yield();
@@ -678,6 +732,7 @@ void loop() {
           }
         yield();
         unsigned long secsSince1900 = timecor + (millis()/1000);
+        
         srlcd.setCursor(18,0);
         switch(get_signal_qua(6, 0))
         {
@@ -742,6 +797,13 @@ void loop() {
           }
         srlcd.print(numberOfSeconds(epoch));
       }
+	  
+	if(but_reed == true) {
+			srlcd.setCursor(0,0);
+			sprintf(cstr1, "%d%d%d", digitalRead(POWERB), digitalRead(UPB), digitalRead(DNB));
+			srlcd.print(cstr1);
+			but_reed = false;
+	}
     loop_i++;
   }
 
@@ -981,9 +1043,11 @@ bool A1_data_pr(char *s, unsigned int s_size) {
 		  "EVC:%f RSSI:%d", esp_vcc, WiFi.RSSI());
 	if(idht_ok == true) {
 	sprintf(s,
-			"%s DTMP:%f"
-			  " DHUM:%f", s, tidht_temp, tidht_hum);
+			"%s TMP:%f"
+			  " HUM:%f"
+			  " PRE:%f", s, tidht_temp, tidht_hum, bme.readPressure()/133.322);
 	}
+  sprintf(s, "%s LUX:%d", s, ilux);
   sprintf(s, "%s FW:%d", s, fw_ver);
   sprintf(s, "%s ;\n\0", s);
   return 0;
@@ -1108,7 +1172,7 @@ bool parse_NAROD(char* tempstr) {
 	return data_rec;
 }
 
-bool lcdbacklset(int bkl){
+bool lcdbacklset(bool bkl){
  switch (bkl) {
 	case 1:
 		lcdbackl=true;
@@ -1124,5 +1188,52 @@ bool lcdbacklset(int bkl){
 
 bool lcdbacklset(){
 	return lcdbackl;
+}
+
+
+
+void POWERBhandleInt()
+{
+  bpower = true;
+  but_reed=true;
+  buthandleInterrupts();	
+  ppress ++;
+  if(ppress >= 2)
+  {
+	  lcdbacklset(!lcdbacklset());  
+  }
+  if(ppress > 3)
+  {
+	  ESP.restart();
+  }
+  return;
+}
+void UPBhandleInt()
+{   if(loop_u < 5)
+		loop_u++;
+	else
+		loop_u = 0;
+	loop_u_new=1;
+  bup = true;
+  but_reed=true;
+  buthandleInterrupts();	
+  return;
+}
+void DNBhandleInt()
+{   if(loop_u > 0)
+		loop_u--;
+	else
+		loop_u = 5;
+	loop_u_new=1;
+  bdn = true;
+  but_reed=true;	
+  buthandleInterrupts();
+  return;
+}
+void buthandleInterrupts()
+{
+  return;
+  but_reed=true;	
+  return;
 }
 #pragma GCC pop_options
