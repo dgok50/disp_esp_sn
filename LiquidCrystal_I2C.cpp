@@ -195,12 +195,12 @@ void LiquidCrystal_I2C::createChar(uint8_t location, uint8_t charmap[]) {
 // Turn the (optional) backlight off/on
 void LiquidCrystal_I2C::noBacklight(void) {
 	_backlightval=LCD_NOBACKLIGHT;
-	expanderWrite(0);
+	expanderWrite(_backlightval);
 }
 
 void LiquidCrystal_I2C::backlight(void) {
 	_backlightval=LCD_BACKLIGHT;
-	expanderWrite(0);
+	expanderWrite(_backlightval);
 }
 bool LiquidCrystal_I2C::getBacklight() {
   return _backlightval == LCD_BACKLIGHT;
