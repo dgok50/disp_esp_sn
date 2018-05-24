@@ -41,8 +41,10 @@
 
 
 const char *HOST_NAME = "DISP_ESP";
+bool DEBUG = false;
+
 const char *endl = "\n";
-const int fw_ver = 101;
+const int fw_ver = 102;
 
 #define dataPin 12
 #define clockPin 14
@@ -477,6 +479,9 @@ server.on("/i2c", []() {
         if (server.arg("backlight") != "") {
             lcdbacklset(tobool(server.arg("backlight").c_str()));
         }
+        if (server.arg("DEBUG") != "") {
+            DEBUG=tobool(server.arg("DEBUG").c_str());
+        }
 		if (server.arg("loop_en") != "") {
             loop_en = tobool(server.arg("loop_en").c_str());
         }
@@ -662,24 +667,7 @@ void loop() {
         delay(2000);
         srlcd.clear();
         loop_en = true;
-    }/*
-	if(digitalRead(DNB) == LOW) {
-		srlcd.setCursor(0,0);
-		srlcd.print("0");
-		loop_u_new=1;
-		loop_u++;
-		delay(500);
-	}
-	if(digitalRead(UPB) == LOW) {
-		srlcd.setCursor(0,0);
-		srlcd.print("16");
-		loop_u_new=1;
-		loop_u--;
-		if(loop_u<0)
-			loop_u=0;
-		
-		delay(500);
-	}*/
+    }
     if(loop_en == true) {
         //if(dht_ok == 1){
 		if(loop_u_new==1){
@@ -798,7 +786,7 @@ void loop() {
         srlcd.print(numberOfSeconds(epoch));
       }
 	  
-	if(but_reed == true) {
+	if(but_reed == true && DEBUG == true) {
 			srlcd.setCursor(0,0);
 			sprintf(cstr1, "%d%d%d", digitalRead(POWERB), digitalRead(UPB), digitalRead(DNB));
 			srlcd.print(cstr1);
@@ -1009,6 +997,7 @@ bool loadConfig() {
     }
 	
     lcdbacklset(tobool(json["lcdbackl"]));
+    DEBUG=tobool(json["DEBUG"]);
 	narodmon_nts = tobool(json["narodmon_nts"]);
 
 	 
@@ -1026,6 +1015,7 @@ bool saveConfig() {
     json["lcdbackl"] = lcdbacklset();
     json["wname"] = wname;
     json["wpass"] = wpass;
+	json["DEBUG"] = DEBUG;
 	json["narodmon_nts"] = narodmon_nts;
     json.printTo(configFile);
 	configFile.close();
@@ -1230,10 +1220,11 @@ void DNBhandleInt()
   buthandleInterrupts();
   return;
 }
+
 void buthandleInterrupts()
 {
-  return;
-  but_reed=true;	
+  if(DEBUG == true) {
+  but_reed=true; }
   return;
 }
 #pragma GCC pop_options
