@@ -44,7 +44,7 @@ const char *HOST_NAME = "DISP_ESP";
 bool DEBUG = false;
 
 const char *endl = "\n";
-const int fw_ver = 102;
+const int fw_ver = 103;
 
 #define dataPin 12
 #define clockPin 14
@@ -671,7 +671,6 @@ void loop() {
     if(loop_en == true) {
         //if(dht_ok == 1){
 		if(loop_u_new==1){
-			ppress=0;
 			loop_u_new=0;
             char sm[2] = {' ', ' '};
             srlcd.setCursor(0,1);
@@ -708,6 +707,7 @@ void loop() {
                 loop_u=0;
               }
 			if(loop_u_new==0) {
+				ppress=0;
 				srlcd.print(cstr1);
 				srlcd.writecode(sm[0]);
 				srlcd.writecode(sm[1]);
@@ -851,6 +851,7 @@ void loop() {
 			if(loop_u_new==0) {
 				srlcd.print(cstr1);
 				print_bool(i_bool);
+				saveConfig();
 				for( i=strlen(cstr1); i <= 24; i++)
 				{
 					srlcd.write(' ');
