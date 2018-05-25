@@ -62,6 +62,7 @@ Ticker data_collect, data_send_tic;
 Adafruit_BME280 bme;
 void buthandleInterrupts();
 void POWERBhandleInt();
+void print_bool(bool);
 void UPBhandleInt();
 void DNBhandleInt();
 
@@ -73,15 +74,15 @@ ESP8266HTTPUpdateServer httpUpdater;
 float mqv=0, mq7=0, mq9=0, vin=0, mc_vcc=0, mc_temp=0, lux=0, esp_vcc=0, tmp=0, mqv5=0, mq9_5=0;
 float dht_temp=0, dht_hum=0, bmp_temp=0, bmp_pre=0, rdy=0, idht_temp=0, idht_hum=0, tidht_hum=0, ilux=0;
 float sdht_temp[S_MAX], sdht_hum[S_MAX], tidht_temp=0;
-unsigned int loop_i = 0, i=0, loop_u = 0, s_i=0, ppress=0;
+unsigned int loop_i = 0, i=0, loop_u = 0, s_i=0, ppress=0, menu_i = 0, menu_j = 0;
 
 
 unsigned long tfs = 0, timecor=0, timea1pr=0;
 
-volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, idht_ok=false;
+volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, idht_ok=false, i_bool=false;
 volatile bool ispmode = false, drq = false, send_data = false, repsend = false, s_redy=false;
 volatile bool loop_en=1, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, narodmon_nts = false;
-volatile bool ntp_error = false, but_reed = false, bpower = false, bup = false, bdn = false;
+volatile bool ntp_error = false, but_reed = false, bpower = false, bup = false, bdn = false, menu_mode = false;
 
 char cstr1[BUF_SIZE], replyb[RBUF_SIZE], nreplyb[RBUF_SIZE], ctmp='\0';
 String wpass="84992434219", wname="A1 Net";
@@ -623,10 +624,9 @@ void loop() {
             }
           }
     }
-
-    delay(1000);
-
-    if(loop_i > 10){
+	
+	delay(500);
+    if(loop_i > 20){
         httpRequest();
         loop_i = 0;
         loop_u++;
@@ -785,7 +785,81 @@ void loop() {
           }
         srlcd.print(numberOfSeconds(epoch));
       }
-	  
+	if(menu_mode == true){
+		bzero(cstr1, BUF_SIZE);
+		sprintf(cstr1, "Test Menu");
+		srlcd.setCursor(20 - strlen(cstr1), 0);
+		srlcd.print(cstr1);
+		loop_en = false;
+		
+		srlcd.setCursor(0, 1);
+		
+		if(loop_i == 19)
+		{
+			srlcd.clear();
+			bzero(cstr1, BUF_SIZE);
+			menu_mode = false;
+            loop_en = true;			
+		}
+		
+		if(loop_u_new == 1) {
+			loop_u_new = 0;
+			if(loop_u==1){
+                sprintf(cstr1, "Отл режим: ");
+				if(bpower == true) {
+				    ppress = 0;
+					bpower = false;
+					DEBUG = !DEBUG;
+				}
+				i_bool = DEBUG;
+            }
+            else if(loop_u==2){
+                sprintf(cstr1, "Подсветка: ");	
+				ppress = 0;			
+				if(bpower == true) {
+					bpower = false;
+					lcdbacklset(!lcdbacklset());
+				}
+				i_bool = lcdbacklset();
+		    }
+            else if(loop_u==3){
+                sprintf(cstr1, "Отпр narodmon: ");	
+				ppress = 0;	
+				if(bpower == true) {
+					bpower = false;
+					narodmon_nts = !narodmon_nts;
+				}
+				i_bool = narodmon_nts;
+            }
+			/*else if(loop_u==4){
+				sprintf(cstr1, "Вн темп: %.2f");
+			}
+			else if(loop_u==5){
+				sprintf(cstr1, "Вн влажн: %.2f", tidht_hum);
+			}*/
+            else {
+                sprintf(cstr1, "Обновление: ");		
+				ppress = 0;
+				if(bpower == true) {
+					bpower = false;
+					//selfup = !selfup;
+				}
+				i_bool = selfup;
+                loop_u=0;
+            }
+			 
+			if(loop_u_new==0) {
+				srlcd.print(cstr1);
+				print_bool(i_bool);
+				for( i=strlen(cstr1); i <= 24; i++)
+				{
+					srlcd.write(' ');
+				}
+			}
+			  
+		}
+	}
+	yield();
 	if(but_reed == true && DEBUG == true) {
 			srlcd.setCursor(0,0);
 			sprintf(cstr1, "%d%d%d", digitalRead(POWERB), digitalRead(UPB), digitalRead(DNB));
@@ -794,6 +868,14 @@ void loop() {
 	}
     loop_i++;
   }
+  
+void print_bool(bool stat) {
+	if(stat == true)
+		srlcd.print("Вкл ");
+	else
+		srlcd.print("Выкл");
+	return;
+}
 
 bool parse_A1DSP(char* tempstr) {
     //rx входная строка, rs колличество символов в строке, rc количество параметров
@@ -1188,9 +1270,17 @@ void POWERBhandleInt()
   but_reed=true;
   buthandleInterrupts();	
   ppress ++;
+  loop_i = 0;
+  if(ppress == 1)
+	  loop_u_new=1;
   if(ppress >= 2)
   {
 	  lcdbacklset(!lcdbacklset());  
+  }  
+  if(ppress == 3) {
+	  bpower = 0;
+	  srlcd.clear();
+	  menu_mode = true;
   }
   if(ppress > 3)
   {
@@ -1199,7 +1289,9 @@ void POWERBhandleInt()
   return;
 }
 void UPBhandleInt()
-{   if(loop_u < 5)
+{   
+  loop_i = 0;
+  if(loop_u < 5)
 		loop_u++;
 	else
 		loop_u = 0;
@@ -1210,7 +1302,9 @@ void UPBhandleInt()
   return;
 }
 void DNBhandleInt()
-{   if(loop_u > 0)
+{ 
+  loop_i = 0;
+  if(loop_u > 0)
 		loop_u--;
 	else
 		loop_u = 5;
