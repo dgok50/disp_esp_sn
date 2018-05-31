@@ -1,4 +1,6 @@
 /*
+MELT RUS LCD Added (UTF-8)
+Direct byte write added .writecode(HEX Code);
 
 ShiftRegLCD123  - 1,2 and 3-wire shiftregister-based HD44780 compatible LCD library for Arduino
 
