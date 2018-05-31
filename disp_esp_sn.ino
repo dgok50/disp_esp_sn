@@ -1,3 +1,11 @@
+/*
+TODO: Перенести обрабодтчик индекса меню из обрабодтчика прерываний
+	  Сделать меню многоуровневым 
+	  Добавить автономный режим
+	  Добавить подгрежаемые с сервера меню для управления системой
+	  Добавить поддержку MQTT
+*/
+
 #include "ESP8266HTTPUpdateServer.h"
 #include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
@@ -44,7 +52,7 @@ const char *HOST_NAME = "DISP_ESP";
 bool DEBUG = false;
 
 const char *endl = "\n";
-const int fw_ver = 103;
+const int fw_ver = 106;
 
 #define dataPin 12
 #define clockPin 14
@@ -80,7 +88,7 @@ unsigned int loop_i = 0, i=0, loop_u = 0, s_i=0, ppress=0, menu_i = 0, menu_j = 
 unsigned long tfs = 0, timecor=0, timea1pr=0;
 
 volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, idht_ok=false, i_bool=false;
-volatile bool ispmode = false, drq = false, send_data = false, repsend = false, s_redy=false;
+volatile bool ispmode = false, drq = false, send_data = false, repsend = false, s_redy=false, no_opt=false;
 volatile bool loop_en=1, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, narodmon_nts = false;
 volatile bool ntp_error = false, but_reed = false, bpower = false, bup = false, bdn = false, menu_mode = false;
 
@@ -392,14 +400,15 @@ server.on("/i2c", []() {
          "SketchMD5: %s\n"
          "CPU Frq: %d MHz\n"
          "Free Heap: %d\n"
-
          "ESP VCC: %.2f\n"
-         "Int DHT OK: %d\n"
-         "Int DHT Hum: %.2f%c\n"
-         "Int DHT Temp: %.2f%cC\n"
-         "Int DHT S REDY: %d\n"
-         "Int DHT Hum: %.2f%c\n"
-         "Int DHT S Temp: %.2f%cC\n"
+		 "Int light sens: %dlux"
+         "Int BMP OK: %d\n"
+         "Int BMP Pressure: %.2fmmHg\n"
+         "Int BMP Hum: %.2f%c\n"
+         "Int BMP Temp: %.2f%cC\n"
+         "Int BMP S REDY: %d\n"
+         "Int BMP Hum: %.2f%c\n"
+         "Int BMP S Temp: %.2f%cC\n"
          "Time from start: %lu hours %lu minutes %lu Sec, and %lu days \n"
          "ESP Chip ID: %X\n"
          "Flash id: %X\n"
@@ -418,7 +427,7 @@ server.on("/i2c", []() {
          "Signal quality: %d %%\n"
          "Last Reply: %s\n", HOST_NAME, fw_ver/100, (fw_ver%100)/10, fw_ver%10, timea1pr,
 		 mac, ESP.getSketchSize(), ESP.getSketchMD5().c_str(), ESP.getCpuFreqMHz(),
-		 ESP.getFreeHeap(), esp_vcc, idht_ok, idht_hum, 0x25, idht_temp, 0xB0, s_redy, tidht_hum,
+		 ESP.getFreeHeap(), esp_vcc, lightMeter.readLightLevel(), idht_ok, bme.readPressure()/133.322, idht_hum, 0x25, idht_temp, 0xB0, s_redy, tidht_hum,
 		 0x25, tidht_temp, 0xB0, numberOfHours(tfs), numberOfMinutes(tfs), numberOfSeconds(tfs), elapsedDays(tfs),
 		 ESP.getChipId(), ESP.getFlashChipId(), ESP.getFlashChipRealSize(), ESP.getFlashChipSize(), ESP.getFlashChipSpeed(),
 		 (ESP.getFlashChipMode() == FM_QIO ? "QIO" : ESP.getFlashChipMode() == FM_QOUT ? "QOUT" : ESP.getFlashChipMode() == FM_DIO ? "DIO" : ESP.getFlashChipMode() == FM_DOUT ? "DOUT" : "UNKNOWN"),
@@ -787,7 +796,14 @@ void loop() {
       }
 	if(menu_mode == true){
 		bzero(cstr1, BUF_SIZE);
+		
+		srlcd.setCursor(0, 0);
 		sprintf(cstr1, "Test Menu");
+		
+		for( i=0; i <= (strlen(cstr1)+1); i++)
+		{
+					srlcd.write(' ');
+		}
 		srlcd.setCursor(20 - strlen(cstr1), 0);
 		srlcd.print(cstr1);
 		loop_en = false;
@@ -801,7 +817,7 @@ void loop() {
 			menu_mode = false;
             loop_en = true;			
 		}
-		
+		no_opt=false;
 		if(loop_u_new == 1) {
 			loop_u_new = 0;
 			if(loop_u==1){
@@ -823,7 +839,7 @@ void loop() {
 				i_bool = lcdbacklset();
 		    }
             else if(loop_u==3){
-                sprintf(cstr1, "Отпр narodmon: ");	
+                sprintf(cstr1, "Отп narodmon: ");	
 				ppress = 0;	
 				if(bpower == true) {
 					bpower = false;
@@ -831,31 +847,45 @@ void loop() {
 				}
 				i_bool = narodmon_nts;
             }
-			/*else if(loop_u==4){
-				sprintf(cstr1, "Вн темп: %.2f");
-			}
-			else if(loop_u==5){
-				sprintf(cstr1, "Вн влажн: %.2f", tidht_hum);
-			}*/
-            else {
+			else if(loop_u==4){
                 sprintf(cstr1, "Обновление: ");		
 				ppress = 0;
 				if(bpower == true) {
 					bpower = false;
-					//selfup = !selfup;
+					selfup = !selfup;
 				}
 				i_bool = selfup;
+			}/*
+			else if(loop_u==5){
+				sprintf(cstr1, "Вн влажн: %.2f", tidht_hum);
+			}*/
+            else {
+				sprintf(cstr1, "Выход");		
+				ppress = 0;
+				if(bpower == true) {
+					bpower = false;
+					srlcd.clear();
+					bzero(cstr1, BUF_SIZE);
+					menu_mode = false;
+					loop_en = true;	
+					delay(1000);
+				}
+				no_opt=true;
                 loop_u=0;
             }
 			 
-			if(loop_u_new==0) {
+			if(loop_u_new==0 && menu_mode == true) {
+				srlcd.writecode(0x84);
 				srlcd.print(cstr1);
-				print_bool(i_bool);
+				if(no_opt==false)
+					print_bool(i_bool);
 				saveConfig();
 				for( i=strlen(cstr1); i <= 24; i++)
 				{
 					srlcd.write(' ');
 				}
+				srlcd.setCursor(19, 1);
+				srlcd.writecode(0x85);
 			}
 			  
 		}
@@ -1272,16 +1302,15 @@ void POWERBhandleInt()
   buthandleInterrupts();	
   ppress ++;
   loop_i = 0;
-  if(ppress == 1)
-	  loop_u_new=1;
-  if(ppress >= 2)
+//  if(ppress == 1)
+//	  loop_u_new=1;
+  if(ppress == 1) 
   {
-	  lcdbacklset(!lcdbacklset());  
-  }  
-  if(ppress == 3) {
+	  loop_u_new=1;
+	  if(menu_mode != true) {
 	  bpower = 0;
 	  srlcd.clear();
-	  menu_mode = true;
+	  menu_mode = true;}
   }
   if(ppress > 3)
   {
