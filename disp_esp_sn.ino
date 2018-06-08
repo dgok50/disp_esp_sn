@@ -52,7 +52,7 @@ const char *HOST_NAME = "DISP_ESP";
 bool DEBUG = false;
 
 const char *endl = "\n";
-const int fw_ver = 106;
+const int fw_ver = 107;
 
 #define dataPin 12
 #define clockPin 14
@@ -80,15 +80,15 @@ ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
 
 float mqv=0, mq7=0, mq9=0, vin=0, mc_vcc=0, mc_temp=0, lux=0, esp_vcc=0, tmp=0, mqv5=0, mq9_5=0;
-float dht_temp=0, dht_hum=0, bmp_temp=0, bmp_pre=0, rdy=0, idht_temp=0, idht_hum=0, tidht_hum=0, ilux=0;
-float sdht_temp[S_MAX], sdht_hum[S_MAX], tidht_temp=0;
+float dht_temp=0, dht_hum=0, bmp_temp=0, bmp_pre=0, rdy=0, ibme_temp=0, ibme_hum=0, tibme_hum=0, ilux=0, tilux=0;
+float sbme_temp[S_MAX], sbme_hum[S_MAX], sbme_pre[S_MAX], silux[S_MAX], tibme_temp=0, ibme_pre=0, tibme_pre=0;
 unsigned int loop_i = 0, i=0, loop_u = 0, s_i=0, ppress=0, menu_i = 0, menu_j = 0;
 
 
 unsigned long tfs = 0, timecor=0, timea1pr=0;
 
-volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, idht_ok=false, i_bool=false;
-volatile bool ispmode = false, drq = false, send_data = false, repsend = false, s_redy=false, no_opt=false;
+volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, idht_ok=false, i_bool=false, ls_error = false;
+volatile bool ispmode = false, drq = false, send_data = false, repsend = false, s_redy=false, no_opt=false, auto_led=false;
 volatile bool loop_en=1, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, narodmon_nts = false;
 volatile bool ntp_error = false, but_reed = false, bpower = false, bup = false, bdn = false, menu_mode = false;
 
@@ -217,7 +217,7 @@ void setup() {
     }
     if(selfup == false) {
 	Wire.begin();
-	lightMeter.begin();
+	ls_error = lightMeter.begin();
 	bme.begin();  
 	bme.setSampling(
 	    Adafruit_BME280::MODE_FORCED,
@@ -401,7 +401,8 @@ server.on("/i2c", []() {
          "CPU Frq: %d MHz\n"
          "Free Heap: %d\n"
          "ESP VCC: %.2f\n"
-		 "Int light sens: %dlux"
+		 "Light sensor error: %d\n"
+		 "Int light sens: %dlux\n"
          "Int BMP OK: %d\n"
          "Int BMP Pressure: %.2fmmHg\n"
          "Int BMP Hum: %.2f%c\n"
@@ -427,8 +428,8 @@ server.on("/i2c", []() {
          "Signal quality: %d %%\n"
          "Last Reply: %s\n", HOST_NAME, fw_ver/100, (fw_ver%100)/10, fw_ver%10, timea1pr,
 		 mac, ESP.getSketchSize(), ESP.getSketchMD5().c_str(), ESP.getCpuFreqMHz(),
-		 ESP.getFreeHeap(), esp_vcc, lightMeter.readLightLevel(), idht_ok, bme.readPressure()/133.322, idht_hum, 0x25, idht_temp, 0xB0, s_redy, tidht_hum,
-		 0x25, tidht_temp, 0xB0, numberOfHours(tfs), numberOfMinutes(tfs), numberOfSeconds(tfs), elapsedDays(tfs),
+		 ESP.getFreeHeap(), esp_vcc, ls_error, lightMeter.readLightLevel(), idht_ok, ibme_pre, ibme_hum, 0x25, ibme_temp, 0xB0, s_redy, tibme_hum,
+		 0x25, tibme_temp, 0xB0, numberOfHours(tfs), numberOfMinutes(tfs), numberOfSeconds(tfs), elapsedDays(tfs),
 		 ESP.getChipId(), ESP.getFlashChipId(), ESP.getFlashChipRealSize(), ESP.getFlashChipSize(), ESP.getFlashChipSpeed(),
 		 (ESP.getFlashChipMode() == FM_QIO ? "QIO" : ESP.getFlashChipMode() == FM_QOUT ? "QOUT" : ESP.getFlashChipMode() == FM_DIO ? "DIO" : ESP.getFlashChipMode() == FM_DOUT ? "DOUT" : "UNKNOWN"),
 		 ESP.getResetReason().c_str(), ESP.getResetS(), ESP.getResetInfo().c_str(), WiFi.status(),
@@ -557,25 +558,41 @@ void loop() {
 	  narodmon_send=false;
 	}
     if(loop_en == true) {
-		ilux = lightMeter.readLightLevel();
-        esp_vcc = ESP.getVcc()/1000.0;
 		if(data_get==true) {
+			esp_vcc = ESP.getVcc()/1000.0;
+			ilux = lightMeter.readLightLevel();
+			
+			if(auto_led == true)
+			{
+				if(ilux > 25) {
+					lcdbacklset(false);
+				}
+				else {
+					lcdbacklset(true);
+				}
+			}
+		
+		
+			bme.takeForcedMeasurement();
 			tmp=bme.readHumidity();
 			if(tmp < 0 || tmp > 100 || tmp == NAN){
 				idht_ok=false;
 			}
 			if(tmp > 0 && tmp < 100 && tmp != NAN){
-				idht_temp = bme.readTemperature()-2;
-				idht_hum = tmp;
+				ibme_temp = bme.readTemperature()-2;
+				ibme_pre = bme.readPressure()/133.322;
+				ibme_hum = tmp;
 				idht_ok=true;
 			}
-			if(idht_temp == 0 && idht_hum == 0){
+			if(ibme_temp == 0 && ibme_hum == 0){
 				idht_ok=false;
 			}
 			data_get=false;
 			if(idht_ok==1){
-			sdht_hum[s_i]=idht_hum;
-			sdht_temp[s_i]=idht_temp;
+			silux[s_i]=ilux;
+			sbme_hum[s_i]=ibme_hum;
+			sbme_temp[s_i]=ibme_temp;
+			sbme_pre[s_i]=ibme_pre;
 			if(s_i >= S_MAX) {
 				s_redy=1;
 				s_i=0;
@@ -585,12 +602,17 @@ void loop() {
 			}
 		}
 		if(s_redy==1) {
-				tidht_hum=get_scsf(sdht_hum,S_MAX);
-				tidht_temp=get_scsf(sdht_temp,S_MAX);
+				//tilux=ilux;
+				tilux=get_scsf(silux,S_MAX);
+				tibme_hum=get_scsf(sbme_hum,S_MAX);
+				tibme_temp=get_scsf(sbme_temp,S_MAX);
+				tibme_pre=get_scsf(sbme_pre,S_MAX);
 			}
 		else {
-				tidht_hum=idht_hum;
-				tidht_temp=idht_temp;
+				tilux=ilux;
+				tibme_hum=ibme_hum;
+				tibme_temp=ibme_temp;
+				tibme_pre=ibme_pre;
 			}
 		}
         if(client.available()) {
@@ -695,24 +717,24 @@ void loop() {
                 if(lux == 0){
                 loop_u++;
 				loop_u_new=1;}
-                sprintf(cstr1, "Осв: %.2fлкс", lux);}
+                sprintf(cstr1, "Осв: %.2fлкс", lux);} 
             else if(loop_u==3){
                 sprintf(cstr1, "Темп: %.2f", dht_temp);
                 sm[0]=0x99;
                 sm[1]='C';
               }
 			else if(loop_u==4 && idht_ok == true){
-				sprintf(cstr1, "Вн темп: %.2f", tidht_temp);
+				sprintf(cstr1, "Вн темп: %.2f", tibme_temp);
 				sm[0]=0x99;
 				sm[1]='C';
 			}
 			else if(loop_u==5 && idht_ok == true){
-				sprintf(cstr1, "Вн влажн: %.2f", tidht_hum);
+				sprintf(cstr1, "Вн влажн: %.2f", tibme_hum);
 				sm[0]=0x25;
 			}
 			
             else {
-                sprintf(cstr1, "Давлен: %.2f%ммРтСт", bmp_pre);
+                sprintf(cstr1, "Давлен: %.2f%ммРтСт", tibme_pre);
                 loop_u=0;
               }
 			if(loop_u_new==0) {
@@ -768,7 +790,7 @@ void loop() {
         // subtract seventy years:
         unsigned long epoch = secsSince1900 - seventyYears;
         //srlcd.setCursor(0,0);
-	//	srlcd.print(dht.computeHeatIndex(idht_temp, idht_hum, false));
+	//	srlcd.print(dht.computeHeatIndex(ibme_temp, ibme_hum, false));
         srlcd.setCursor(5,0);
 		srlcd.print(" ");
         i=numberOfHours(epoch);
@@ -798,14 +820,12 @@ void loop() {
 		bzero(cstr1, BUF_SIZE);
 		
 		srlcd.setCursor(0, 0);
-		sprintf(cstr1, "Test Menu");
-		
-		for( i=0; i <= (strlen(cstr1)+1); i++)
-		{
-					srlcd.write(' ');
-		}
-		srlcd.setCursor(20 - strlen(cstr1), 0);
+		sprintf(cstr1, "Настройки");
 		srlcd.print(cstr1);
+		for(i=(20-strlen(cstr1)); i !=0; i--)
+		{
+			srlcd.write(' ');
+		}
 		loop_en = false;
 		
 		srlcd.setCursor(0, 1);
@@ -855,10 +875,17 @@ void loop() {
 					selfup = !selfup;
 				}
 				i_bool = selfup;
-			}/*
+			}
 			else if(loop_u==5){
-				sprintf(cstr1, "Вн влажн: %.2f", tidht_hum);
-			}*/
+				sprintf(cstr1, "Авто подсв: ");
+				ppress = 0;	
+				if(bpower == true) {
+					bpower = false;
+					auto_led = !auto_led;
+				}
+				i_bool = auto_led;
+				saveConfig();
+			}
             else {
 				sprintf(cstr1, "Выход");		
 				ppress = 0;
@@ -1098,17 +1125,17 @@ bool loadConfig() {
 	
 	
 
-    if (!json.success()) {
+    if (!json.success()) 
         return false;
-      }
-
-    if(json["fw_ver"]==NULL) {
-        return false;}
-    if(atoi(json["fw_ver"]) != fw_ver){
+	
+    if(json["auto_led"]==NULL)
+		return false;
+    if(json["fw_ver"]==NULL) 
+        return false;
+    if(atoi(json["fw_ver"]) != fw_ver)
 		return false;
 	
-    }
-	
+	auto_led = tobool(json["auto_led"]);
     lcdbacklset(tobool(json["lcdbackl"]));
     DEBUG=tobool(json["DEBUG"]);
 	narodmon_nts = tobool(json["narodmon_nts"]);
@@ -1125,6 +1152,7 @@ bool saveConfig() {
         return false;
     }
     json["fw_ver"] = fw_ver;
+	json["auto_led"] = auto_led;
     json["lcdbackl"] = lcdbacklset();
     json["wname"] = wname;
     json["wpass"] = wpass;
@@ -1148,9 +1176,9 @@ bool A1_data_pr(char *s, unsigned int s_size) {
 	sprintf(s,
 			"%s TMP:%f"
 			  " HUM:%f"
-			  " PRE:%f", s, tidht_temp, tidht_hum, bme.readPressure()/133.322);
+			  " PRE:%f", s, tibme_temp, tibme_hum, ibme_pre);
 	}
-  sprintf(s, "%s LUX:%d", s, ilux);
+  sprintf(s, "%s LUX:%d", s, tilux);
   sprintf(s, "%s FW:%d", s, fw_ver);
   sprintf(s, "%s ;\n\0", s);
   return 0;
@@ -1172,7 +1200,7 @@ bool NAROD_data_send(char *str,short int size) {
   if(idht_ok == true) {
 	sprintf(str,
 			"%s#DTMP#%.2f\n"
-			  "#DHUM#%.2f\n", str, tidht_temp, tidht_hum);
+			  "#DHUM#%.2f\n", str, tibme_temp, tibme_hum);
   }
   sprintf(str, "%s##\n\0", str);
   

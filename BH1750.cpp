@@ -64,7 +64,7 @@ BH1750::BH1750(byte addr) {
 bool BH1750::begin(Mode mode) {
 
   // I2C is expected to be initialized outside this library
-
+  Wire.begin();
   // Configure sensor in specified mode
   return configure(mode);
 
