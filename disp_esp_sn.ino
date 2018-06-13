@@ -52,7 +52,7 @@ const char *HOST_NAME = "DISP_ESP";
 bool DEBUG = false;
 
 const char *endl = "\n";
-const int fw_ver = 107;
+const int fw_ver = 108;
 
 #define dataPin 12
 #define clockPin 14
@@ -82,15 +82,15 @@ ESP8266HTTPUpdateServer httpUpdater;
 float mqv=0, mq7=0, mq9=0, vin=0, mc_vcc=0, mc_temp=0, lux=0, esp_vcc=0, tmp=0, mqv5=0, mq9_5=0;
 float dht_temp=0, dht_hum=0, bmp_temp=0, bmp_pre=0, rdy=0, ibme_temp=0, ibme_hum=0, tibme_hum=0, ilux=0, tilux=0;
 float sbme_temp[S_MAX], sbme_hum[S_MAX], sbme_pre[S_MAX], silux[S_MAX], tibme_temp=0, ibme_pre=0, tibme_pre=0;
-unsigned int loop_i = 0, i=0, loop_u = 0, s_i=0, ppress=0, menu_i = 0, menu_j = 0;
+volatile unsigned int loop_i = 0, i=0, loop_u = 0, s_i=0, ppress=0, menu_i = 0, menu_j = 0;
 
 
 unsigned long tfs = 0, timecor=0, timea1pr=0;
 
-volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, idht_ok=false, i_bool=false, ls_error = false;
+volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, ibmp_ok=false, i_bool=false, ls_error = false;
 volatile bool ispmode = false, drq = false, send_data = false, repsend = false, s_redy=false, no_opt=false, auto_led=false;
 volatile bool loop_en=1, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, narodmon_nts = false;
-volatile bool ntp_error = false, but_reed = false, bpower = false, bup = false, bdn = false, menu_mode = false;
+volatile bool ntp_error = false, but_reed = false, bpower = false, bup = false, bdn = false, menu_mode = false, offline = false;
 
 char cstr1[BUF_SIZE], replyb[RBUF_SIZE], nreplyb[RBUF_SIZE], ctmp='\0';
 String wpass="84992434219", wname="A1 Net";
@@ -305,9 +305,11 @@ void setup() {
             srlcd.print("WAN ТД    ");
             srlcd.setCursor(0,1);
             srlcd.print("ПРЕРХОД В РЕЖИМ ТД  ");
-            loop_en=false;
+            //loop_en=false;
+			offline = true;
             WiFi.softAP(HOST_NAME, password);
             IPAddress myIP = WiFi.softAPIP();
+			break;
           }
       }
     //Serial.println("WiFi connected");
@@ -428,7 +430,7 @@ server.on("/i2c", []() {
          "Signal quality: %d %%\n"
          "Last Reply: %s\n", HOST_NAME, fw_ver/100, (fw_ver%100)/10, fw_ver%10, timea1pr,
 		 mac, ESP.getSketchSize(), ESP.getSketchMD5().c_str(), ESP.getCpuFreqMHz(),
-		 ESP.getFreeHeap(), esp_vcc, ls_error, lightMeter.readLightLevel(), idht_ok, ibme_pre, ibme_hum, 0x25, ibme_temp, 0xB0, s_redy, tibme_hum,
+		 ESP.getFreeHeap(), esp_vcc, ls_error, lightMeter.readLightLevel(), ibmp_ok, ibme_pre, ibme_hum, 0x25, ibme_temp, 0xB0, s_redy, tibme_hum,
 		 0x25, tibme_temp, 0xB0, numberOfHours(tfs), numberOfMinutes(tfs), numberOfSeconds(tfs), elapsedDays(tfs),
 		 ESP.getChipId(), ESP.getFlashChipId(), ESP.getFlashChipRealSize(), ESP.getFlashChipSize(), ESP.getFlashChipSpeed(),
 		 (ESP.getFlashChipMode() == FM_QIO ? "QIO" : ESP.getFlashChipMode() == FM_QOUT ? "QOUT" : ESP.getFlashChipMode() == FM_DIO ? "DIO" : ESP.getFlashChipMode() == FM_DOUT ? "DOUT" : "UNKNOWN"),
@@ -524,7 +526,7 @@ server.on("/i2c", []() {
     srlcd.print("Запуск ntp          ");
 
     WiFi.hostByName(ntpServerName, timeServerIP); 
-    sendNTPpacket(timeServerIP);                                // send an NTP packet to a time server
+	sendNTPpacket(timeServerIP);                                // send an NTP packet to a time server
     delay(1000);
     int cb = udp.parsePacket();
     if (cb) {
@@ -552,6 +554,10 @@ server.on("/i2c", []() {
 void loop() {
     yield();
     server.handleClient();
+	if(WiFi.status() != WL_CONNECTED) {
+		offline = true; }
+	else {
+		offline = false; }
 	
 	if(narodmon_send==true) {
 	  repsend = !NAROD_data_send(cstr1, BUF_SIZE);
@@ -564,7 +570,7 @@ void loop() {
 			
 			if(auto_led == true)
 			{
-				if(ilux > 25) {
+				if(ilux > 40) {
 					lcdbacklset(false);
 				}
 				else {
@@ -576,19 +582,19 @@ void loop() {
 			bme.takeForcedMeasurement();
 			tmp=bme.readHumidity();
 			if(tmp < 0 || tmp > 100 || tmp == NAN){
-				idht_ok=false;
+				ibmp_ok=false;
 			}
 			if(tmp > 0 && tmp < 100 && tmp != NAN){
 				ibme_temp = bme.readTemperature()-2;
 				ibme_pre = bme.readPressure()/133.322;
 				ibme_hum = tmp;
-				idht_ok=true;
+				ibmp_ok=true;
 			}
 			if(ibme_temp == 0 && ibme_hum == 0){
-				idht_ok=false;
+				ibmp_ok=false;
 			}
 			data_get=false;
-			if(idht_ok==1){
+			if(ibmp_ok==1){
 			silux[s_i]=ilux;
 			sbme_hum[s_i]=ibme_hum;
 			sbme_temp[s_i]=ibme_temp;
@@ -661,11 +667,11 @@ void loop() {
         httpRequest();
         loop_i = 0;
         loop_u++;
-	loop_u_new=1;
+	    loop_u_new=1;
       }
     yield();
     
-    if(selfup==true) {
+    if(selfup==true && offline == false) {
         ESP.wdtDisable();
         srlcd.clear();
         srlcd.setCursor(0,0);
@@ -707,9 +713,6 @@ void loop() {
             srlcd.setCursor(0,1);
             yield();
             if(loop_u==1){
-                if(dht_hum > 98){
-                loop_u++;
-				loop_u_new=1;}
                 sprintf(cstr1, "Влажн: %.2f", dht_hum);
                 sm[0]=0x25;
               }
@@ -723,12 +726,12 @@ void loop() {
                 sm[0]=0x99;
                 sm[1]='C';
               }
-			else if(loop_u==4 && idht_ok == true){
+			else if(loop_u==4 && ibmp_ok == true){
 				sprintf(cstr1, "Вн темп: %.2f", tibme_temp);
 				sm[0]=0x99;
 				sm[1]='C';
 			}
-			else if(loop_u==5 && idht_ok == true){
+			else if(loop_u==5 && ibmp_ok == true){
 				sprintf(cstr1, "Вн влажн: %.2f", tibme_hum);
 				sm[0]=0x25;
 			}
@@ -753,8 +756,9 @@ void loop() {
         unsigned long secsSince1900 = timecor + (millis()/1000);
         
         srlcd.setCursor(18,0);
-        switch(get_signal_qua(6, 0))
-        {
+		if(offline != true) {
+			switch(get_signal_qua(6, 0))
+			{
             case 0:
             srlcd.writecode(0x80);
             srlcd.writecode(0x80);
@@ -783,7 +787,12 @@ void loop() {
             srlcd.writecode(0x83);
             srlcd.writecode(0x83);
                 break;
-        }
+			}
+		}
+		else {
+            srlcd.writecode(0x20);
+            srlcd.writecode(0xfc);
+		}
         // now convert NTP time into everyday time:
         // Unix time starts on Jan 1 1970. In seconds, that's 2208988800:
         const unsigned long seventyYears = 2208988800UL;
@@ -1089,7 +1098,7 @@ void httpRequest() {
     client.stop();
 
     // if there's a successful connection:
-    if (client.connect("dev.a1mc.ru", 80)) {
+    if (client.connect("dev.a1mc.ru", 80) && offline == false) {
         ////Serial.println("connecting...");
         // send the HTTP GET request:
         client.println("GET /kd2.php HTTP/1.1");
@@ -1172,7 +1181,7 @@ bool A1_data_pr(char *s, unsigned int s_size) {
   bzero(s, s_size);
   sprintf(s,
 		  "EVC:%f RSSI:%d", esp_vcc, WiFi.RSSI());
-	if(idht_ok == true) {
+	if(ibmp_ok == true) {
 	sprintf(s,
 			"%s TMP:%f"
 			  " HUM:%f"
@@ -1197,7 +1206,7 @@ bool NAROD_data_send(char *str,short int size) {
 		  "#WSQ#%d#Качество сигнала WAN\n"
 		  "#FHED#%d#Free ram in byte\n"
 		  "#lcdbackl#%d\n", bmac[0], bmac[1], bmac[2], bmac[3], bmac[4], bmac[5], HOST_NAME, fw_ver/100, (fw_ver%100)/10, fw_ver%10, WiFi.RSSI(), ESP.getFreeHeap(),lcdbacklset());
-  if(idht_ok == true) {
+  if(ibmp_ok == true) {
 	sprintf(str,
 			"%s#DTMP#%.2f\n"
 			  "#DHUM#%.2f\n", str, tibme_temp, tibme_hum);
