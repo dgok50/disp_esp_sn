@@ -52,7 +52,7 @@ const char *HOST_NAME = "DISP_ESP";
 bool DEBUG = false;
 
 const char *endl = "\n";
-const int fw_ver = 108;
+const int fw_ver = 109;
 
 #define dataPin 12
 #define clockPin 14
@@ -621,7 +621,7 @@ void loop() {
 				tibme_pre=ibme_pre;
 			}
 		}
-        if(client.available()) {
+        if(client.available() && offline == false) {
             bzero(replyb, RBUF_SIZE);
             for(i = 0;client.available() && i < RBUF_SIZE;i++)
             {
@@ -664,7 +664,8 @@ void loop() {
 	
 	delay(500);
     if(loop_i > 20){
-        httpRequest();
+		if(offline == false) {
+			httpRequest(); }
         loop_i = 0;
         loop_u++;
 	    loop_u_new=1;
@@ -713,13 +714,12 @@ void loop() {
             srlcd.setCursor(0,1);
             yield();
             if(loop_u==1){
+				if(offline == true){
+					loop_u = 4;}
                 sprintf(cstr1, "Влажн: %.2f", dht_hum);
                 sm[0]=0x25;
               }
-            else if(loop_u==2){
-                if(lux == 0){
-                loop_u++;
-				loop_u_new=1;}
+            if(loop_u==2){
                 sprintf(cstr1, "Осв: %.2fлкс", lux);} 
             else if(loop_u==3){
                 sprintf(cstr1, "Темп: %.2f", dht_temp);
@@ -1098,7 +1098,7 @@ void httpRequest() {
     client.stop();
 
     // if there's a successful connection:
-    if (client.connect("dev.a1mc.ru", 80) && offline == false) {
+    if (client.connect("dev.a1mc.ru", 80)) {
         ////Serial.println("connecting...");
         // send the HTTP GET request:
         client.println("GET /kd2.php HTTP/1.1");
