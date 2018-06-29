@@ -738,7 +738,7 @@ void loop() {
 			
             else {
                 sprintf(cstr1, "Давлен: %.2f%ммРтСт", tibme_pre);
-                loop_u=0;
+                loop_u=1;
               }
 			if(loop_u_new==0) {
 				ppress=0;
@@ -883,6 +883,7 @@ void loop() {
 					bpower = false;
 					selfup = !selfup;
 				}
+				no_opt=true;
 				i_bool = selfup;
 			}
 			else if(loop_u==5){
