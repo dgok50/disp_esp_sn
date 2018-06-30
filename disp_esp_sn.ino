@@ -1139,13 +1139,12 @@ bool loadConfig() {
         return false;
 	
     if(json["auto_led"]==NULL)
-		return false;
+	return false;
     if(json["fw_ver"]==NULL) 
-        return false;
-    if(atoi(json["fw_ver"]) != fw_ver)
-		return false;
-	
-	auto_led = tobool(json["auto_led"]);
+	return false;
+    if(atoi(json["fw_ver"]) < fw_ver)
+	return false;
+    auto_led = tobool(json["auto_led"]);
     lcdbacklset(tobool(json["lcdbackl"]));
     DEBUG=tobool(json["DEBUG"]);
 	narodmon_nts = tobool(json["narodmon_nts"]);
@@ -1209,8 +1208,11 @@ bool NAROD_data_send(char *str,short int size) {
 		  "#lcdbackl#%d\n", bmac[0], bmac[1], bmac[2], bmac[3], bmac[4], bmac[5], HOST_NAME, fw_ver/100, (fw_ver%100)/10, fw_ver%10, WiFi.RSSI(), ESP.getFreeHeap(),lcdbacklset());
   if(ibmp_ok == true) {
 	sprintf(str,
-			"%s#DTMP#%.2f\n"
-			  "#DHUM#%.2f\n", str, tibme_temp, tibme_hum);
+			"%s#DTMP#%.2f#Температура\n"
+			  "#DHUM#%.2f#Влажность\n"
+			  "#DPRE#%.2f#Давление\n"
+			  "#DLUX#%.2f#Освещённость\n"
+			  , str, tibme_temp, tibme_hum, ibme_pre, tilux);
   }
   sprintf(str, "%s##\n\0", str);
   
