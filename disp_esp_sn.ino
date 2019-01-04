@@ -2,20 +2,31 @@
 TODO: Перенести обрабодтчик индекса меню из обрабодтчика прерываний
 	  Сделать меню многоуровневым 
 	  Добавить автономный режим
-	  Добавить подгрежаемые с сервера меню для управления системой
+	  Добавить подгружаемые с сервера меню для управления системой
 	  Добавить поддержку MQTT
+	  Рефракторинг кода!!
+	  Переработать поддержку RTC и убрать двойную конверсию
+	  I2C:
+		0x20 - I2C LCD
+		0x23 - BH1750
+		0x76 - BME280
+		0x68 - DS1307
+		0x50 - AT24C32 EEPROM
 */
 
 #include "ESP8266HTTPUpdateServer.h"
 #include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
 #include "FS.h"
+
+#include "TimeLib.h"
 #define ESP_CH
 #include "a1fl.c" //Библиотека с прекладными функциями
 #include <ArduinoJson.h>
 #include <ESP8266WebServer.h>
 #include "BH1750.h"
 #include <ESP8266WiFi.h>
+
 
 #include "Adafruit_Sensor.h"
 #include "Adafruit_BME280.h"
@@ -24,6 +35,7 @@ TODO: Перенести обрабодтчик индекса меню из о�
 #include <Wire.h>
 #include <WiFiClient.h>
 #include <WiFiUdp.h>
+#include "uRTCLib.h"
 
 #include "LiquidCrystal_I2C.h"
 #include <Ticker.h>
@@ -52,7 +64,9 @@ const char *HOST_NAME = "DISP_ESP";
 bool DEBUG = false;
 
 const char *endl = "\n";
-const int fw_ver = 109;
+const int fw_ver = 111;
+
+const char timeZone = 3;
 
 #define dataPin 12
 #define clockPin 14
@@ -68,6 +82,9 @@ ADC_MODE(ADC_VCC);
 Ticker data_collect, data_send_tic;
 
 Adafruit_BME280 bme;
+
+uRTCLib rtc(0x68, 0x50);
+
 void buthandleInterrupts();
 void POWERBhandleInt();
 void print_bool(bool);
@@ -81,15 +98,15 @@ ESP8266HTTPUpdateServer httpUpdater;
 
 float mqv=0, mq7=0, mq9=0, vin=0, mc_vcc=0, mc_temp=0, lux=0, esp_vcc=0, tmp=0, mqv5=0, mq9_5=0;
 float dht_temp=0, dht_hum=0, bmp_temp=0, bmp_pre=0, rdy=0, ibme_temp=0, ibme_hum=0, tibme_hum=0, ilux=0, tilux=0;
-float sbme_temp[S_MAX], sbme_hum[S_MAX], sbme_pre[S_MAX], silux[S_MAX], tibme_temp=0, ibme_pre=0, tibme_pre=0;
+float sbme_temp[S_MAX], sbme_hum[S_MAX], sbme_pre[S_MAX], silux[S_MAX], tibme_temp=0, ibme_pre=0, tibme_pre=0, h_cor=0;
 volatile unsigned int loop_i = 0, i=0, loop_u = 0, s_i=0, ppress=0, menu_i = 0, menu_j = 0;
 
 
-unsigned long tfs = 0, timecor=0, timea1pr=0;
+time_t tfs = 0, timecor=0, timea1pr=0;
 
 volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, ibmp_ok=false, i_bool=false, ls_error = false;
 volatile bool ispmode = false, drq = false, send_data = false, repsend = false, s_redy=false, no_opt=false, auto_led=false;
-volatile bool loop_en=1, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, narodmon_nts = false;
+volatile bool loop_en=1, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, narodmon_nts = true;
 volatile bool ntp_error = false, but_reed = false, bpower = false, bup = false, bdn = false, menu_mode = false, offline = false;
 
 char cstr1[BUF_SIZE], replyb[RBUF_SIZE], nreplyb[RBUF_SIZE], ctmp='\0';
@@ -392,7 +409,7 @@ server.on("/i2c", []() {
 
     server.on("/sysinfo.txt", []() {
         bzero(cstr1, BUF_SIZE);
-        
+        rtc.refresh();
         tfs = millis()/1000;
 		sprintf(cstr1, "Hostname: %s\nFW Ver: %d.%d.%d\n"
 		 "Comp info, time: " __TIME__ ", date: " __DATE__ "\n"
@@ -428,6 +445,7 @@ server.on("/i2c", []() {
 		 "Repet send: %d\n"
 		 "Loop enable: %d\n"
          "Signal quality: %d %%\n"
+		 "RTC Time: %d hours %d minutes %d second %d year %d month %d day\n"
          "Last Reply: %s\n", HOST_NAME, fw_ver/100, (fw_ver%100)/10, fw_ver%10, timea1pr,
 		 mac, ESP.getSketchSize(), ESP.getSketchMD5().c_str(), ESP.getCpuFreqMHz(),
 		 ESP.getFreeHeap(), esp_vcc, ls_error, lightMeter.readLightLevel(), ibmp_ok, ibme_pre, ibme_hum, 0x25, ibme_temp, 0xB0, s_redy, tibme_hum,
@@ -435,7 +453,8 @@ server.on("/i2c", []() {
 		 ESP.getChipId(), ESP.getFlashChipId(), ESP.getFlashChipRealSize(), ESP.getFlashChipSize(), ESP.getFlashChipSpeed(),
 		 (ESP.getFlashChipMode() == FM_QIO ? "QIO" : ESP.getFlashChipMode() == FM_QOUT ? "QOUT" : ESP.getFlashChipMode() == FM_DIO ? "DIO" : ESP.getFlashChipMode() == FM_DOUT ? "DOUT" : "UNKNOWN"),
 		 ESP.getResetReason().c_str(), ESP.getResetS(), ESP.getResetInfo().c_str(), WiFi.status(),
-		 WiFi.SSID().c_str(), WiFi.RSSI(), data_get, repsend, loop_en, get_signal_qua(100, 0), replyb);
+		 WiFi.SSID().c_str(), WiFi.RSSI(), data_get, repsend, loop_en, get_signal_qua(100, 0), rtc.hour(), 
+		 rtc.minute(), rtc.second(), rtc.year(), rtc.month(), rtc.day(), replyb);
         server.send(200, "text/xhtml", cstr1);
         delay(1000);
       });
@@ -536,7 +555,10 @@ server.on("/i2c", []() {
         unsigned long highWord = word(packetBuffer[40], packetBuffer[41]);
         unsigned long lowWord = word(packetBuffer[42], packetBuffer[43]);
         timecor = highWord << 16 | lowWord;
+	    setTime(timecor - 2208988800UL + timeZone * SECS_PER_HOUR);
+	    rtc.set(second(), minute(), hour(), weekday(), day(), month(), year());
         timecor = timecor - (millis()/1000);
+		//  RTCLib::set(byte second, byte minute, byte hour, byte dayOfWeek, byte dayOfMonth, byte month, byte year)
         ntp_error = false;
       }
 	else
@@ -544,7 +566,18 @@ server.on("/i2c", []() {
 		srlcd.setCursor(0,1);
 		srlcd.print("Ошибка ntp          ");
 		ntp_error = true;
+		rtc.refresh();
+		if(rtc.year() > 2000){
+			srlcd.setCursor(0,1);
+			srlcd.print("Установка по rtc    ");
+			rtc.refresh();
+			setTime(rtc.hour(), rtc.minute(), rtc.second(), rtc.day(), rtc.month(), rtc.year());
+			timecor = (now() + 2208988800UL) - (millis()/1000);
+			
+		}
 	}
+	
+	
     udp.stop();
     srlcd.clear();
 	data_collect.attach(5, getd);
@@ -803,7 +836,7 @@ void loop() {
         srlcd.setCursor(5,0);
 		srlcd.print(" ");
         i=numberOfHours(epoch);
-        i+=3;
+        i+=timeZone;
         if(i>23) {
             i-=24;
           }
@@ -887,13 +920,15 @@ void loop() {
 				i_bool = selfup;
 			}
 			else if(loop_u==5){
-				sprintf(cstr1, "Авто подсв: ");
+				float h = 8000*((1+tibme_temp*(1/273))/(bmp_pre)); //-tibme_pre
+				h = h - h_cor;
+				sprintf(cstr1, "Высота: %f", h);
 				ppress = 0;	
 				if(bpower == true) {
 					bpower = false;
-					auto_led = !auto_led;
+					h_cor = h;
 				}
-				i_bool = auto_led;
+				no_opt=true;
 				saveConfig();
 			}
             else {
@@ -1051,6 +1086,10 @@ bool parse_A1DSP(char* tempstr) {
                     ntp_error = false;
                     srlcd.setCursor(0,1);
                     srlcd.print("Уст врем через a1pr ");
+					
+					setTime(timea1pr + timeZone * SECS_PER_HOUR);
+					rtc.set(second(), minute(), hour(), weekday(), day(), month(), year());
+					
                     timecor = timecor - (millis()/1000);
                 }
 			}
@@ -1143,7 +1182,7 @@ bool loadConfig() {
     if(json["fw_ver"]==NULL) 
 	return false;
     if(atoi(json["fw_ver"]) < fw_ver)
-	return false;
+	//return false;
     auto_led = tobool(json["auto_led"]);
     lcdbacklset(tobool(json["lcdbackl"]));
     DEBUG=tobool(json["DEBUG"]);
@@ -1187,7 +1226,7 @@ bool A1_data_pr(char *s, unsigned int s_size) {
 			  " HUM:%f"
 			  " PRE:%f", s, tibme_temp, tibme_hum, ibme_pre);
 	}
-  sprintf(s, "%s LUX:%d", s, tilux);
+  sprintf(s, "%s LUX:%f", s, tilux);
   sprintf(s, "%s FW:%d", s, fw_ver);
   sprintf(s, "%s ;\n\0", s);
   return 0;
