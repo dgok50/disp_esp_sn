@@ -21,6 +21,7 @@ TODO: Перенести обрабодтчик индекса меню из о�
 
 #include "TimeLib.h"
 #define ESP_CH
+#include "favicon.c"
 #include "a1fl.c" //Библиотека с прекладными функциями
 #include <ArduinoJson.h>
 #include <ESP8266WebServer.h>
@@ -64,7 +65,7 @@ const char *HOST_NAME = "DISP_ESP";
 bool DEBUG = false;
 
 const char *endl = "\n";
-const int fw_ver = 111;
+const int fw_ver = 112;
 
 const char timeZone = 3;
 
@@ -155,7 +156,7 @@ long get_signal_qua(long rfrom, long rto){
     return map(rssi, -40, -85, rfrom, rto);
   }
 
-const char *webPage ="<!DOCTYPE html>"
+static const PROGMEM char webPage[] ="<!DOCTYPE html>"
 "<html>\n"
 " <body>\n"
 "  <h1>ESP8266 DISP</h1>\n"
@@ -339,7 +340,7 @@ void setup() {
     srlcd.print("Запуск сервера  ");
 	
     server.on("/", []() {
-        server.send(200, "text/html", webPage);
+        server.send_P(200, "text/html", webPage);
         //Serial.printf("Stations connected = %d\n", WiFi.softAPgetStationNum());
       });
 
@@ -401,11 +402,10 @@ server.on("/i2c", []() {
 	delay(1000);
 });
 
-
-	  
-	  
-	  
-	  
+server.on("/favicon.ico", []() {
+	server.send_P(200, "image/x-icon", (const char*)favicon_ico, favicon_ico_len);
+	delay(1000);
+});   
 
     server.on("/sysinfo.txt", []() {
         bzero(cstr1, BUF_SIZE);
@@ -514,6 +514,7 @@ server.on("/i2c", []() {
         if (server.arg("DEBUG") != "") {
             DEBUG=tobool(server.arg("DEBUG").c_str());
         }
+		
 		if (server.arg("loop_en") != "") {
             loop_en = tobool(server.arg("loop_en").c_str());
         }
@@ -522,7 +523,11 @@ server.on("/i2c", []() {
             narodmon_nts = tobool(server.arg("narodmon_nts").c_str());
         }
 		
-        server.send(200, "text/html", webPage);
+		if (server.arg("auto_led") != "") {
+            auto_led = tobool(server.arg("auto_led").c_str());
+        }
+		
+        server.send_P(200, "text/html", webPage);
         delay(500);
         saveConfig();
       });
