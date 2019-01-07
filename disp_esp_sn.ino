@@ -112,6 +112,9 @@ volatile bool ntp_error = false, but_reed = false, bpower = false, bup = false, 
 
 char cstr1[BUF_SIZE], replyb[RBUF_SIZE], nreplyb[RBUF_SIZE], ctmp='\0';
 String wpass="84992434219", wname="A1 Net";
+
+const char www_username[] = "dgok50", www_password[] = "123456";
+
 char mac[22];
 double rdtmp[3][RCOL+2];
 
@@ -156,22 +159,31 @@ long get_signal_qua(long rfrom, long rto){
     return map(rssi, -40, -85, rfrom, rto);
   }
 
-static const PROGMEM char webPage[] ="<!DOCTYPE html>"
+static const PROGMEM char webPage[] ="<!DOCTYPE html>\n"
 "<html>\n"
+" <head>\n"
+"  <meta charset=\"utf-8\">\n"
+"  <title>ESPDISP Датчики</title>\n"
+"  <link rel=\"shortcut icon\" href=\"favicon.ico\">\n"
+" </head>\n"
 " <body>\n"
 "  <h1>ESP8266 DISP</h1>\n"
-"  <a href= \"/update\">Update dialog</a><br>\n"
-"  <a href= \"/online_update\">Online Update</a><br>\n"
-"  <a href= \"/config.json\">Json Config info</a><br>\n"
+"  <a href= \"/update\">Ручное обновление</a><br>\n"
+"  <a href= \"/online_update\">Автоматическое обновление</a><br>\n"
+"  <a href= \"/config.json\">Просмотр Json настроек</a><br>\n"
 "  <a href= \"/a1pr\">A1_DSP</a><br>\n"
 "  <a href= \"/replyb.txt\">Reply buffer</a><br>\n"
-"  <a href= \"/sysinfo.txt\">System info</a><br>\n"
-"  <a href= \"/set?restart=1\">Restart device</a><br>\n"
-"  <a href= \"/set?backlight=0\">Turn OFF backlight</a><br>\n"
-"  <a href= \"/set?backlight=1\">Turn ON backlight</a><br>\n"
-"  <a href= \"/set?format=243\">Reset default st</a><br>\n"
+"  <a href= \"/sysinfo.txt\">Информация о модуле</a><br>\n"
+"  <a href= \"/set?restart=1\">Перезагрузка</a><br>\n"
+"  <a href= \"/set?backlight=0\">Отключить подсветку</a><br>\n"
+"  <a href= \"/set?backlight=1\">Включить подсветку</a><br>\n"
+"  <a href= \"/set?format=243\">Сброс настроек</a><br>\n"
 " </body>\n"
 "</html>\n";
+
+const String authFailResponse1 = "<HTML>\n<HEAD><TITLE>401 Доступ запрещён</TITLE><meta charset=\"utf-8\"></HEAD>\n<BODY BGCOLOR=\"#cc9999\">\n<H4>401 Доступ запрещён</H4> Доступ к ";
+
+const String authFailResponse2 = " запрещён.</BODY>\n</HTML>\n";
 
 LiquidCrystal_I2C srlcd(0x20, 20, 2);
 BH1750 lightMeter;
@@ -179,6 +191,13 @@ BH1750 lightMeter;
 #define UPB 0
 #define POWERB 2
 
+void sendHeaders(){
+        server.sendHeader("Server", "ESP8266/1.0.1", true);
+		server.sendHeader("X-Content-Type-Options", "nosniff", false);
+		server.sendHeader("Content-Language", "ru", false);
+        server.sendHeader("Retry-After", "2", false);
+		return;
+}
 void setup() {
     //Serial.begin();   
     //Serial.println("A1 DISP_ESP_ST");
@@ -340,13 +359,16 @@ void setup() {
     srlcd.print("Запуск сервера  ");
 	
     server.on("/", []() {
-        server.send_P(200, "text/html", webPage);
+		sendHeaders();
+		//server.sendContent_P(200, "image/x-icon", (const char*)favicon_ico, favicon_ico_len);
+        server.send_P(200, "text/html; charset=utf-8", webPage);
         //Serial.printf("Stations connected = %d\n", WiFi.softAPgetStationNum());
       });
 
     server.on("/config.json", []() {
+		sendHeaders();
         File file = SPIFFS.open("/config.json", "r");
-        size_t sent = server.streamFile(file, "application/json");
+        size_t sent = server.streamFile(file, "application/json; charset=utf-8");
         file.close();
         delay(1000);
       });
@@ -355,7 +377,7 @@ void setup() {
 	  
 
 server.on("/i2c", []() {
-	
+	 sendHeaders();
 	 bzero(cstr1, BUF_SIZE);
      sprintf(cstr1, "-");
      
@@ -398,16 +420,19 @@ server.on("/i2c", []() {
       }
     }
   }
-	server.send(200, "text/plain", cstr1);
+	server.send(200, "text/plain; charset=utf-8", cstr1);
 	delay(1000);
 });
 
 server.on("/favicon.ico", []() {
+	sendHeaders();
 	server.send_P(200, "image/x-icon", (const char*)favicon_ico, favicon_ico_len);
 	delay(1000);
 });   
 
-    server.on("/sysinfo.txt", []() {
+server.on("/sysinfo.txt", []() {
+		sendHeaders();
+        server.sendHeader("Refresh", "10", false);
         bzero(cstr1, BUF_SIZE);
         rtc.refresh();
         tfs = millis()/1000;
@@ -425,10 +450,10 @@ server.on("/favicon.ico", []() {
          "Int BMP OK: %d\n"
          "Int BMP Pressure: %.2fmmHg\n"
          "Int BMP Hum: %.2f%c\n"
-         "Int BMP Temp: %.2f%cC\n"
+         "Int BMP Temp: %.2f°C\n"
          "Int BMP S REDY: %d\n"
          "Int BMP Hum: %.2f%c\n"
-         "Int BMP S Temp: %.2f%cC\n"
+         "Int BMP S Temp: %.2f°C\n"
          "Time from start: %lu hours %lu minutes %lu Sec, and %lu days \n"
          "ESP Chip ID: %X\n"
          "Flash id: %X\n"
@@ -448,47 +473,58 @@ server.on("/favicon.ico", []() {
 		 "RTC Time: %d hours %d minutes %d second %d year %d month %d day\n"
          "Last Reply: %s\n", HOST_NAME, fw_ver/100, (fw_ver%100)/10, fw_ver%10, timea1pr,
 		 mac, ESP.getSketchSize(), ESP.getSketchMD5().c_str(), ESP.getCpuFreqMHz(),
-		 ESP.getFreeHeap(), esp_vcc, ls_error, lightMeter.readLightLevel(), ibmp_ok, ibme_pre, ibme_hum, 0x25, ibme_temp, 0xB0, s_redy, tibme_hum,
-		 0x25, tibme_temp, 0xB0, numberOfHours(tfs), numberOfMinutes(tfs), numberOfSeconds(tfs), elapsedDays(tfs),
+		 ESP.getFreeHeap(), esp_vcc, ls_error, lightMeter.readLightLevel(), ibmp_ok, ibme_pre, ibme_hum, 0x25, ibme_temp,  s_redy, tibme_hum,
+		 0x25, tibme_temp, numberOfHours(tfs), numberOfMinutes(tfs), numberOfSeconds(tfs), elapsedDays(tfs),
 		 ESP.getChipId(), ESP.getFlashChipId(), ESP.getFlashChipRealSize(), ESP.getFlashChipSize(), ESP.getFlashChipSpeed(),
 		 (ESP.getFlashChipMode() == FM_QIO ? "QIO" : ESP.getFlashChipMode() == FM_QOUT ? "QOUT" : ESP.getFlashChipMode() == FM_DIO ? "DIO" : ESP.getFlashChipMode() == FM_DOUT ? "DOUT" : "UNKNOWN"),
 		 ESP.getResetReason().c_str(), ESP.getResetS(), ESP.getResetInfo().c_str(), WiFi.status(),
 		 WiFi.SSID().c_str(), WiFi.RSSI(), data_get, repsend, loop_en, get_signal_qua(100, 0), rtc.hour(), 
 		 rtc.minute(), rtc.second(), rtc.year(), rtc.month(), rtc.day(), replyb);
-        server.send(200, "text/xhtml", cstr1);
+        server.send(200, "text/plain; charset=utf-8", cstr1);
         delay(1000);
       });
     server.on("/nreplyb.txt", []() {
-        server.send(200, "text/xhtml", nreplyb);
+		sendHeaders();
+        server.send(200, "text/plain; charset=utf-8", nreplyb);
         delay(1000);
       });
     server.on("/replyb.txt", []() {
-        server.send(200, "text/xhtml", replyb);
+		sendHeaders();
+        server.send(200, "text/plain; charset=utf-8", replyb);
         delay(1000);
       });
 	  
     server.on("/a1pr", []() {
+		sendHeaders();
 		A1_data_pr(cstr1, BUF_SIZE);
 		server.send(200, "text/plain", cstr1);
 		delay(1000);
       });
 	
     server.on("/online_update", []() {
+		if (!server.authenticate(www_username, www_password)) {
+			return server.requestAuthentication(DIGEST_AUTH, "Требуется авторизация", authFailResponse1+server.uri()+authFailResponse2);
+		}
+		sendHeaders();
         loop_en=false;
-        server.send(200, "text/txt", "Try to selfupdate...\n");
+        server.send(200, "text/plain; charset=utf-8", "Try to selfupdate...\n");
         delay(1000);
         selfup=true;
       });
 
     server.on("/set", []() {
+		if (!server.authenticate(www_username, www_password)) {
+			return server.requestAuthentication(DIGEST_AUTH, "Требуется авторизация", authFailResponse1+server.uri()+authFailResponse2);
+		}
+		sendHeaders();
         if (server.arg("restart") != "") {
-            server.send(200, "text/xhtml", "RESTARTING...\n");
+            server.send(200, "text/plain; charset=utf-8", "RESTARTING...\n");
             delay(1000);
             ESP.restart();
           }
         if (server.arg("format") != "") {
             if(atoi(server.arg("pass").c_str()) == 243) {
-                server.send(200, "text/xhtml", "Starting format...\n");
+                server.send(200, "text/plain; charset=utf-8", "Starting format...\n");
                 delay(1000);
                 SPIFFS.format();
                 ESP.restart();
@@ -533,7 +569,7 @@ server.on("/favicon.ico", []() {
       });
 
     server.begin();
-    httpUpdater.setup(&server);
+    httpUpdater.setup(&server, www_username, www_password);
 	
 	srlcd.setCursor(OFFSET,0);
     srlcd.print("ПОДКЛЮЧ ПРИРЫВ");
