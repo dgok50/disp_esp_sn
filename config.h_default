@@ -1,0 +1,17 @@
+/*Для устраннения возможной колизии,
+ проверяем не подключенна ли библиотека*/
+#ifndef __CONFIG_LIB
+#define __CONFIG_LIB
+ 
+#define S_MAX 100
+
+const char *HOST_NAME = "DISP_ESP";
+
+const char timeZone = 3;
+bool DEBUG = false;
+const char *sta_password = "012345678";
+const char* ntpServerName = "pool.ntp.org";
+String wifi_password="01235678", wifi_name="None Net";
+const char www_username[] = "none", www_password[] = "01234567";
+
+#endif

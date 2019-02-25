@@ -17,10 +17,11 @@ TODO: Перенести обрабодтчик индекса меню из о�
 #include "ESP8266HTTPUpdateServer.h"
 #include <ESP8266HTTPClient.h>
 #include <ESP8266httpUpdate.h>
+#define ESP_CH
+#include "config.h"
 #include "FS.h"
 
 #include "TimeLib.h"
-#define ESP_CH
 #include "favicon.c"
 #include "a1fl.c" //Библиотека с прекладными функциями
 #include <ArduinoJson.h>
@@ -41,8 +42,8 @@ TODO: Перенести обрабодтчик индекса меню из о�
 #include "LiquidCrystal_I2C.h"
 #include <Ticker.h>
 
-#pragma GCC push_options
-#pragma GCC optimize ("O0")
+//#pragma GCC push_options
+//#pragma GCC optimize ("O0")
 
 #define SECS_PER_MIN  (60UL)
 #define SECS_PER_HOUR (3600UL)
@@ -54,20 +55,11 @@ TODO: Перенести обрабодтчик индекса меню из о�
 #define RCOL 30
 #define TID 0
 #define HID 1
-#define S_MAX 100
 
 #define USE_SERIAL srlcd
 
 #define OFFSET 10                                           //LCD char offset
 
-
-const char *HOST_NAME = "DISP_ESP";
-bool DEBUG = false;
-
-const char *endl = "\n";
-const int fw_ver = 112;
-
-const char timeZone = 3;
 
 #define dataPin 12
 #define clockPin 14
@@ -78,10 +70,13 @@ const char timeZone = 3;
 #define numberOfHours(_time_) (( _time_% SECS_PER_DAY) / SECS_PER_HOUR)
 #define elapsedDays(_time_) ( _time_ / SECS_PER_DAY)  
 
+const int fw_ver = 114;
+
 ADC_MODE(ADC_VCC);
 
 Ticker data_collect, data_send_tic;
 
+const char *endl = "\n";
 Adafruit_BME280 bme;
 
 uRTCLib rtc(0x68, 0x50);
@@ -92,7 +87,7 @@ void print_bool(bool);
 void UPBhandleInt();
 void DNBhandleInt();
 
-const char *password = "012345780";
+
 
 ESP8266WebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
@@ -111,9 +106,6 @@ volatile bool loop_en=1, selfup=false, lcdbackl=true, data_get=true, narodmon_se
 volatile bool ntp_error = false, but_reed = false, bpower = false, bup = false, bdn = false, menu_mode = false, offline = false;
 
 char cstr1[BUF_SIZE], replyb[RBUF_SIZE], nreplyb[RBUF_SIZE], ctmp='\0';
-String wpass="84992434219", wname="A1 Net";
-
-const char www_username[] = "dgok50", www_password[] = "123456";
 
 char mac[22];
 double rdtmp[3][RCOL+2];
@@ -125,7 +117,6 @@ bool lcdbacklset();
 bool lcdbacklset(bool);
 unsigned int localPort = 2390;                              // local port to listen for UDP packets
 IPAddress timeServerIP;
-const char* ntpServerName = "ru.pool.ntp.org";
 
 const int NTP_PACKET_SIZE = 48;                             // NTP time stamp is in the first 48 bytes of the message
 
@@ -138,7 +129,7 @@ WiFiClient client;
 
 void httpRequest();
 unsigned long sendNTPpacket(IPAddress&);
-//int get_state(char *, unsigned int);
+int get_state(char *, unsigned int);
 bool parse_A1DSP(char*);
 bool parse_NAROD(char*);
 bool A1_data_pr(char *, unsigned int);
@@ -164,7 +155,7 @@ static const PROGMEM char webPage[] ="<!DOCTYPE html>\n"
 " <head>\n"
 "  <meta charset=\"utf-8\">\n"
 "  <title>ESPDISP Датчики</title>\n"
-"  <link rel=\"shortcut icon\" href=\"favicon.ico\">\n"
+"  <link rel=\"shortcut icon\" href=\"favicon.ico\" />\n"
 " </head>\n"
 " <body>\n"
 "  <h1>ESP8266 DISP</h1>\n"
@@ -186,6 +177,7 @@ const String authFailResponse1 = "<HTML>\n<HEAD><TITLE>401 Доступ запр
 const String authFailResponse2 = " запрещён.</BODY>\n</HTML>\n";
 
 LiquidCrystal_I2C srlcd(0x20, 20, 2);
+
 BH1750 lightMeter;
 #define DNB 14
 #define UPB 0
@@ -344,7 +336,7 @@ void setup() {
             srlcd.print("ПРЕРХОД В РЕЖИМ ТД  ");
             //loop_en=false;
 			offline = true;
-            WiFi.softAP(HOST_NAME, password);
+            WiFi.softAP(HOST_NAME, sta_password);
             IPAddress myIP = WiFi.softAPIP();
 			break;
           }
@@ -424,6 +416,12 @@ server.on("/i2c", []() {
 	delay(1000);
 });
 
+server.on("/xml.xml", []() {  //Инициализация обработчика страници XML с данными датчиков
+  get_state(cstr1, BUF_SIZE); //Формированиме XML
+  server.send(200, "text/xml", cstr1); //Отправка данных клиенту
+  delay(1000);
+});
+  
 server.on("/favicon.ico", []() {
 	sendHeaders();
 	server.send_P(200, "image/x-icon", (const char*)favicon_ico, favicon_ico_len);
@@ -532,16 +530,16 @@ server.on("/sysinfo.txt", []() {
           }
         if (server.arg("v_mode") != "") {
             WiFi.disconnect(false);
-            WiFi.begin(wname.c_str(), wpass.c_str());
+            WiFi.begin(wifi_name.c_str(), wifi_password.c_str());
           }
 		  
         if (server.arg("net_name") != "") {
         if (server.arg("pass") != "") {
-              wname = server.arg("net_name");
-              wpass = server.arg("pass");
+              wifi_name = server.arg("net_name");
+              wifi_password = server.arg("pass");
               saveConfig();
               WiFi.disconnect(false);
-              WiFi.begin(wname.c_str(), wpass.c_str());
+              WiFi.begin(wifi_name.c_str(), wifi_password.c_str());
             }
           }
         if (server.arg("backlight") != "") {
@@ -1243,8 +1241,8 @@ bool saveConfig() {
     json["fw_ver"] = fw_ver;
 	json["auto_led"] = auto_led;
     json["lcdbackl"] = lcdbacklset();
-    json["wname"] = wname;
-    json["wpass"] = wpass;
+    json["wifi_name"] = wifi_name;
+    json["wifi_password"] = wifi_password;
 	json["DEBUG"] = DEBUG;
 	json["narodmon_nts"] = narodmon_nts;
     json.printTo(configFile);
@@ -1471,4 +1469,46 @@ void buthandleInterrupts()
   but_reed=true; }
   return;
 }
-#pragma GCC pop_options
+
+int get_state(char *s, unsigned int s_size) { //Формирование XML на основе шаблона
+  sprintf(s,
+          "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
+		  "<esp>\n"
+		  " <fw>\n"
+		  "  <b_time>" __TIME__ "</b_time>\n"
+		  "  <b_date>" __DATE__ "</b_date>\n"
+		  "  <ver>%d</ver>\n"
+		  " </fw>\n"
+		  " <status>\n"
+		  "  <esp_vcc>%f</esp_vcc>\n"
+		  "  <esp_rssi>%d</esp_rssi>\n", fw_ver, esp_vcc, WiFi.RSSI());
+		  
+  bool ilux_ok = 1;
+  if(ilux == 65535)
+	  ilux_ok =0;
+  sprintf(s, "%s  <bmp_r>%d</bmp_r>\n", s, ibmp_ok);
+  sprintf(s, "%s  <bh1750_r>%d</bh1750_r>\n", s, ilux_ok);
+  sprintf(s, "%s </status>\n", s);  
+  sprintf(s, "%s <sensors>\n", s);
+  
+  if(ibmp_ok == true) {
+	sprintf(s, "%s  <bmp>\n",s);
+	sprintf(s,
+		  "%s   <temp>%f</temp>\n"
+			"   <pre>%f</pre>\n"
+			"   <hum>%f</hum>\n", s, tibme_temp, ibme_pre, ibme_hum);
+	sprintf(s, "%s  </bmp>\n",s);
+  }
+  if(ilux_ok == 1) {
+	sprintf(s, "%s  <bh1750>\n",s);
+	sprintf(s, "%s   <lux>%f</lux>\n", s, tilux);
+	sprintf(s, "%s  </bh1750>\n",s);
+  }
+  
+  sprintf(s, "%s </sensors>\n", s);
+  sprintf(s, "%s</esp>\n", s);
+  
+  return 0;
+}
+
+//#pragma GCC pop_options
