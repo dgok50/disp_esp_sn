@@ -162,16 +162,24 @@ static const PROGMEM char webPage[] ="<!DOCTYPE html>\n"
 "  <a href= \"/update\">Ручное обновление</a><br>\n"
 "  <a href= \"/online_update\">Автоматическое обновление</a><br>\n"
 "  <a href= \"/config.json\">Просмотр Json настроек</a><br>\n"
+"  <a href= \"/xml.xml\">Данные в XML</a><br>\n"
 "  <a href= \"/a1pr\">A1_DSP</a><br>\n"
-"  <a href= \"/replyb.txt\">Reply buffer</a><br>\n"
+"  <a href= \"/replyb.txt\">Просмотр буфера 1</a><br>\n"
+"  <a href= \"/nreplyb.txt\">Просмотр буфера 2</a><br>\n"
 "  <a href= \"/sysinfo.txt\">Информация о модуле</a><br>\n"
-"  <a href= \"/set?restart=1\">Перезагрузка</a><br>\n"
+"  <a href= \"/i2c\">Сканирование I2C шин</a><br>\n"
 "  <a href= \"/set?backlight=0\">Отключить подсветку</a><br>\n"
 "  <a href= \"/set?backlight=1\">Включить подсветку</a><br>\n"
+"  <a href= \"/set?auto_led=0\">Отключить авто-подсветку</a><br>\n"
+"  <a href= \"/set?auto_led=1\">Включить авто-подсветку</a><br>\n"
+"  <a href= \"/set?narodmon_nts=0\">Отключить отправку на NARODMON</a><br>\n"
+"  <a href= \"/set?narodmon_nts=1\">Включить отправку на NARODMON</a><br>\n"
+"  <a href= \"/set?restart=1\">Перезагрузка</a><br>\n"
 "  <a href= \"/set?format=243\">Сброс настроек</a><br>\n"
 " </body>\n"
 "</html>\n";
 
+			
 const String authFailResponse1 = "<HTML>\n<HEAD><TITLE>401 Доступ запрещён</TITLE><meta charset=\"utf-8\"></HEAD>\n<BODY BGCOLOR=\"#cc9999\">\n<H4>401 Доступ запрещён</H4> Доступ к ";
 
 const String authFailResponse2 = " запрещён.</BODY>\n</HTML>\n";

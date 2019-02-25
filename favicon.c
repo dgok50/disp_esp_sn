@@ -1,6 +1,6 @@
 #ifndef __FAVICON
 #define __FAVICON
-#define __FAVICON 1.0
+#define __FAVICON_VER 1.0
 
 #include <Arduino.h> 
 
