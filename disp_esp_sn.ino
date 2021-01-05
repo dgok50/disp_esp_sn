@@ -70,7 +70,11 @@ TODO: Перенести обрабодтчик индекса меню из о�
 #define numberOfHours(_time_) (( _time_% SECS_PER_DAY) / SECS_PER_HOUR)
 #define elapsedDays(_time_) ( _time_ / SECS_PER_DAY)  
 
-const int fw_ver = 114;
+const int fw_ver = 115;
+
+IPAddress m_ip(239,243,42,19);
+unsigned int m_port = 6219;
+
 
 ADC_MODE(ADC_VCC);
 
@@ -102,7 +106,7 @@ time_t tfs = 0, timecor=0, timea1pr=0;
 
 volatile bool bmp_ok=false, lux_ok=false, dht_ok=false, data_rec=false, ibmp_ok=false, i_bool=false, ls_error = false;
 volatile bool ispmode = false, drq = false, send_data = false, repsend = false, s_redy=false, no_opt=false, auto_led=false;
-volatile bool loop_en=1, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, narodmon_nts = true;
+volatile bool loop_en=1, selfup=false, lcdbackl=true, data_get=true, narodmon_send=false, loop_u_new=0, local_only = false;
 volatile bool ntp_error = false, but_reed = false, bpower = false, bup = false, bdn = false, menu_mode = false, offline = false;
 
 char cstr1[BUF_SIZE], replyb[RBUF_SIZE], nreplyb[RBUF_SIZE], ctmp='\0';
@@ -170,6 +174,8 @@ static const PROGMEM char webPage[] ="<!DOCTYPE html>\n"
 "  <a href= \"/i2c\">Сканирование I2C шин</a><br>\n"
 "  <a href= \"/set?backlight=0\">Отключить подсветку</a><br>\n"
 "  <a href= \"/set?backlight=1\">Включить подсветку</a><br>\n"
+"  <a href= \"/set?local_only=0\">Отключить локальный режим</a><br>\n"
+"  <a href= \"/set?local_only=1\">Включить локальный режим</a><br>\n"
 "  <a href= \"/set?auto_led=0\">Отключить авто-подсветку</a><br>\n"
 "  <a href= \"/set?auto_led=1\">Включить авто-подсветку</a><br>\n"
 "  <a href= \"/set?narodmon_nts=0\">Отключить отправку на NARODMON</a><br>\n"
@@ -238,8 +244,7 @@ void setup() {
     srlcd.print(".");
     srlcd.backlight();
     srlcd.setCursor(OFFSET,0);
-    srlcd.print("SPIFS");
-    //Serial.println("SPIFS");
+    srlcd.print("SENSORS");
     
     if(ESP.getResetS() == false || digitalRead(POWERB) == LOW)
     {
@@ -263,6 +268,8 @@ void setup() {
 	    Adafruit_BME280::SAMPLING_X1,
 	    Adafruit_BME280::FILTER_OFF);
 	bme.takeForcedMeasurement();
+    srlcd.setCursor(OFFSET,0);
+    srlcd.print("SPIFS      ");
     if (!SPIFFS.begin()) {                                      //|| !digitalRead(BUT)) {
         //Serial.println("Failed to mount file system");
         SPIFFS.format();
@@ -364,6 +371,13 @@ void setup() {
         server.send_P(200, "text/html; charset=utf-8", webPage);
         //Serial.printf("Stations connected = %d\n", WiFi.softAPgetStationNum());
       });
+	  
+	  
+	server.on("/tea", []() { 
+        server.sendHeader("Server", "ESP8266/1.0.1", true);
+        server.sendHeader("HTTP/1.1", " 418 I’m a teapot", false);
+        delay(1000);
+		});
 
     server.on("/config.json", []() {
 		sendHeaders();
@@ -560,6 +574,10 @@ server.on("/sysinfo.txt", []() {
 		if (server.arg("loop_en") != "") {
             loop_en = tobool(server.arg("loop_en").c_str());
         }
+        	
+	if (server.arg("local_only") != "") {
+            local_only = tobool(server.arg("local_only").c_str());
+        }
 		
 		if (server.arg("narodmon_nts") != "") {
             narodmon_nts = tobool(server.arg("narodmon_nts").c_str());
@@ -625,10 +643,11 @@ server.on("/sysinfo.txt", []() {
 	}
 	
 	
-    udp.stop();
+    //udp.stop();
     srlcd.clear();
 	data_collect.attach(5, getd);
 	data_send_tic.attach(300, data_send_f);
+	
   }
 
 void loop() {
@@ -686,6 +705,10 @@ void loop() {
 			else {
 				s_i++;
 			}
+			udp.beginPacket(m_ip, m_port);
+			A1_data_pr(cstr1, BUF_SIZE);
+			udp.write(cstr1);
+			udp.endPacket();
 		}
 		if(s_redy==1) {
 				//tilux=ilux;
@@ -759,12 +782,12 @@ void loop() {
         ESPhttpUpdate.rebootOnUpdate(false);
         srlcd.print("Запуск обновления... ");
         delay(2000);
-        t_httpUpdate_return ret = ESPhttpUpdate.update("http://dev.a1mc.ru/rom/esp8266/disp/flash.bin");
+        t_httpUpdate_return ret = ESPhttpUpdate.update(update_url);
         srlcd.setCursor(0,1);
         switch(ret) {
             case HTTP_UPDATE_FAILED:
                 srlcd.print("Ошибка обновления:  ");
-                delay(2000);
+                delay(1000);
                 srlcd.print(ESPhttpUpdate.getLastErrorString().c_str());
                 break;
 
@@ -795,16 +818,19 @@ void loop() {
             yield();
             if(loop_u==1){
 				if(offline == true){
-					loop_u = 4;}
+					loop_u = 3;}
                 sprintf(cstr1, "Влажн: %.2f", dht_hum);
                 sm[0]=0x25;
               }
             if(loop_u==2){
-                sprintf(cstr1, "Осв: %.2fлкс", lux);} 
-            else if(loop_u==3){
                 sprintf(cstr1, "Темп: %.2f", dht_temp);
                 sm[0]=0x99;
-                sm[1]='C';
+                sm[1]='C';}
+            else if(loop_u==3){
+        	if(offline == true || local_only == true)
+        	    sprintf(cstr1, "Осв: %.2fлкс", tilux); 
+                else
+            	    sprintf(cstr1, "Осв: %.2fлкс", lux); 
               }
 			else if(loop_u==4 && ibmp_ok == true){
 				sprintf(cstr1, "Вн темп: %.2f", tibme_temp);
@@ -818,7 +844,10 @@ void loop() {
 			
             else {
                 sprintf(cstr1, "Давлен: %.2f%ммРтСт", tibme_pre);
-                loop_u=1;
+                if(local_only == false)
+            	    loop_u=1;
+                else
+            	    loop_u=3;
               }
 			if(loop_u_new==0) {
 				ppress=0;
@@ -1017,7 +1046,7 @@ void loop() {
 			but_reed = false;
 	}
     loop_i++;
-  }
+}
   
 void print_bool(bool stat) {
 	if(stat == true)
@@ -1185,11 +1214,12 @@ void httpRequest() {
     client.stop();
 
     // if there's a successful connection:
-    if (client.connect("dev.a1mc.ru", 80)) {
+    if (client.connect(base_server, 80)) {
         ////Serial.println("connecting...");
         // send the HTTP GET request:
         client.println("GET /kd2.php HTTP/1.1");
-        client.println("Host: dev.a1mc.ru");
+        client.print("Host: ");
+        client.println(base_server);
         client.print("User-Agent: ");
         client.print(HOST_NAME);
         client.println("/1.1");
